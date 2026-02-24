@@ -1,4 +1,4 @@
-from app.parser import normalize_screen
+from experimental.app.parser import normalize_screen
 
 
 def test_normalize_screen_strips_ansi_and_ctrl():

@@ -61,3 +61,4 @@
 - SSH support.
 - Auto-reconnect.
 - Replay/recording.
+- HTTP API and alternate CLIs in top-level run/test paths (kept in `experimental/`).
