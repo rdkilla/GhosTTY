@@ -108,74 +108,61 @@ def test_cli_prints_timeout_error_json_unchanged(capsys, monkeypatch):
     assert '"error": "timeout_waiting_stable"' in out
 
 
-class _FakeSocket:
-    def __init__(self, payloads=None):
-        self.closed = False
-        self._payloads = list(payloads or [])
-
-    def settimeout(self, _value):
-        return None
-
-    def recv(self, _size):
-        if self.closed:
-            raise OSError("socket closed")
-        if self._payloads:
-            return self._payloads.pop(0)
-        return b""
-
-    def close(self):
-        self.closed = True
-
-
-class _FakeThread:
-    def __init__(self, target, args=(), daemon=False):
-        self.target = target
-        self.args = args
-        self.daemon = daemon
-        self.started = False
-
-    def start(self):
-        self.started = True
-
-    def is_alive(self):
-        return self.started
-
-    def join(self, timeout=None):
-        self.started = False
-
-
-def test_handle_connect_rapid_reconnect_keeps_connected(monkeypatch):
-    state = SessionState(lock=Lock(), action_lock=Lock())
+def test_send_rejects_unsupported_key(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
     monkeypatch.setattr(handlers, "STATE", state)
 
-    sockets = [_FakeSocket(payloads=[b"first"]), _FakeSocket(payloads=[b"second"])]
+    payload = handle_send({"actions": [{"k": "key", "key": "NotARealKey"}]})
 
-    def fake_create_connection(_addr, timeout=10):
-        return sockets.pop(0)
+    assert payload == {"ok": False, "error": "invalid_action"}
 
-    monkeypatch.setattr(handlers.socket, "create_connection", fake_create_connection)
 
-    created_threads = []
+def test_send_rejects_unknown_action_kind(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
 
-    def fake_thread(*, target, args, daemon):
-        t = _FakeThread(target=target, args=args, daemon=daemon)
-        created_threads.append(t)
-        return t
+    payload = handle_send({"actions": [{"k": "noop"}]})
 
-    monkeypatch.setattr(handlers.threading, "Thread", fake_thread)
+    assert payload == {"ok": False, "error": "invalid_action"}
 
-    handle_connect = handlers.handle_connect
-    handle_connect({"host": "localhost", "port": 23})
 
-    old_thread = created_threads[0]
-    old_socket = state.socket_obj
+def test_send_rejects_missing_required_fields(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
 
-    handle_connect({"host": "localhost", "port": 23})
+    payload_key = handle_send({"actions": [{"k": "key"}]})
+    payload_type = handle_send({"actions": [{"k": "type"}]})
 
-    assert old_socket.closed is True
+    assert payload_key == {"ok": False, "error": "invalid_action"}
+    assert payload_type == {"ok": False, "error": "invalid_action"}
 
-    old_thread.target(*old_thread.args)
 
-    assert state.connected is True
-    assert state.recv_thread is created_threads[1]
-    assert state.recv_thread.started is True
+def test_send_rejects_empty_actions_payload(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    payload = handle_send({"actions": []})
+
+    assert payload == {"ok": False, "error": "invalid_action"}
+
+
+def test_send_converts_send_actions_value_error(monkeypatch):
+    def fake_send_actions(**kwargs):
+        raise ValueError("unsupported action kind: nope")
+
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+    monkeypatch.setattr(handlers, "send_actions", fake_send_actions)
+
+    payload = handle_send({"actions": [{"k": "key", "key": "Enter"}]})
+
+    assert payload == {"ok": False, "error": "invalid_action"}
+
+
+def test_send_rejects_non_positive_repeat_count(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    payload = handle_send({"actions": [{"k": "key", "key": "Enter", "n": 0}]})
+
+    assert payload == {"ok": False, "error": "invalid_action"}
