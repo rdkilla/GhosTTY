@@ -1,61 +1,39 @@
 # GhosTTY
 
-A lightweight Telnet-to-HTTP bridge for AI/game-agent control of BBS sessions (e.g., LORD, Exitilus).
+Initial Node.js CLI skeleton.
 
-## Features
+## Quickstart
 
-- Persistent telnet sessions keyed by `session_id`
-- Send commands/keystrokes over HTTP
-- Poll latest screen snapshot
-- Stream screen updates via Server-Sent Events (SSE)
-- ANSI/control cleanup for easier agent parsing
+1. Install dependencies:
 
-## API
+   ```bash
+   npm install
+   ```
 
-### `POST /session`
-Create a telnet session.
+2. Run the CLI:
 
-Request body:
+   ```bash
+   make run
+   # or npm run run
+   ```
 
-```json
-{
-  "host": "bbs.example.com",
-  "port": 23,
-  "username": null,
-  "password": null,
-  "name": "optional-friendly-name"
-}
-```
+3. Lint the project:
 
-### `POST /session/{session_id}/command`
-Send text/keys to telnet session.
+   ```bash
+   make lint
+   # or npm run lint
+   ```
 
-```json
-{
-  "input": "A\\r",
-  "wait_ms": 400
-}
-```
+4. Execute tests:
 
-### `GET /session/{session_id}/screen`
-Get the latest normalized screen.
+   ```bash
+   make test
+   # or npm test
+   ```
 
-### `GET /session/{session_id}/events`
-SSE stream of screen updates.
-
-### `DELETE /session/{session_id}`
-Close and remove a session.
-
-## Run
+## CLI usage
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+node src/main.js --help
+node src/main.js --version
 ```
-
-## Notes
-
-- This project intentionally keeps telnet option negotiation minimal for broad compatibility.
-- Use raw session logs (`logs/`) for debugging parser mistakes and timing issues.
