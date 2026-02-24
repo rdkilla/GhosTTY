@@ -24,6 +24,7 @@ class SessionState:
     socket_obj: socket.socket | None = None
     recv_thread: threading.Thread | None = None
     stop_event: threading.Event = field(default_factory=threading.Event)
+    connection_token: int = 0
     signature: str = ""
     lock: threading.Lock = field(default_factory=threading.Lock)
     action_lock: threading.Lock = field(default_factory=threading.Lock)

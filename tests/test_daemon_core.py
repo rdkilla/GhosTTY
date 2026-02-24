@@ -106,3 +106,76 @@ def test_cli_prints_timeout_error_json_unchanged(capsys, monkeypatch):
     out = capsys.readouterr().out
     assert '"ok": false' in out
     assert '"error": "timeout_waiting_stable"' in out
+
+
+class _FakeSocket:
+    def __init__(self, payloads=None):
+        self.closed = False
+        self._payloads = list(payloads or [])
+
+    def settimeout(self, _value):
+        return None
+
+    def recv(self, _size):
+        if self.closed:
+            raise OSError("socket closed")
+        if self._payloads:
+            return self._payloads.pop(0)
+        return b""
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeThread:
+    def __init__(self, target, args=(), daemon=False):
+        self.target = target
+        self.args = args
+        self.daemon = daemon
+        self.started = False
+
+    def start(self):
+        self.started = True
+
+    def is_alive(self):
+        return self.started
+
+    def join(self, timeout=None):
+        self.started = False
+
+
+def test_handle_connect_rapid_reconnect_keeps_connected(monkeypatch):
+    state = SessionState(lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    sockets = [_FakeSocket(payloads=[b"first"]), _FakeSocket(payloads=[b"second"])]
+
+    def fake_create_connection(_addr, timeout=10):
+        return sockets.pop(0)
+
+    monkeypatch.setattr(handlers.socket, "create_connection", fake_create_connection)
+
+    created_threads = []
+
+    def fake_thread(*, target, args, daemon):
+        t = _FakeThread(target=target, args=args, daemon=daemon)
+        created_threads.append(t)
+        return t
+
+    monkeypatch.setattr(handlers.threading, "Thread", fake_thread)
+
+    handle_connect = handlers.handle_connect
+    handle_connect({"host": "localhost", "port": 23})
+
+    old_thread = created_threads[0]
+    old_socket = state.socket_obj
+
+    handle_connect({"host": "localhost", "port": 23})
+
+    assert old_socket.closed is True
+
+    old_thread.target(*old_thread.args)
+
+    assert state.connected is True
+    assert state.recv_thread is created_threads[1]
+    assert state.recv_thread.started is True
