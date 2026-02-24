@@ -76,29 +76,50 @@ def extract_hints(text_lines: list[str]) -> dict[str, Any]:
     }
 
 
+def teardown_connection(state: SessionState, join_timeout: float = 1.0) -> None:
+    with state.lock:
+        state.stop_event.set()
+        old_socket = state.socket_obj
+        old_thread = state.recv_thread
+        state.socket_obj = None
+
+    if old_socket:
+        try:
+            old_socket.close()
+        except OSError:
+            pass
+
+    current = threading.current_thread()
+    if old_thread and old_thread is not current and old_thread.is_alive():
+        old_thread.join(timeout=join_timeout)
+
+
 def handle_connect(req: dict[str, Any]) -> dict[str, Any]:
     host = req["host"]
     port = int(req.get("port", 23))
     width = int(req.get("width", 80))
     height = int(req.get("height", 24))
 
+    teardown_connection(STATE)
+
     with STATE.lock:
-        if STATE.connected and STATE.socket_obj:
-            STATE.socket_obj.close()
         STATE.configure_screen(width, height)
         STATE.screen_rev = 0
         STATE.stable_rev = 0
 
     sock = socket.create_connection((host, port), timeout=10)
     sock.settimeout(None)
+
     with STATE.lock:
+        STATE.connection_token += 1
+        connection_token = STATE.connection_token
         STATE.socket_obj = sock
         STATE.connected = True
         STATE.host = host
         STATE.port = port
-        STATE.stop_event.clear()
+        STATE.stop_event = threading.Event()
         STATE.last_change_ts = time.time()
-        STATE.recv_thread = threading.Thread(target=recv_loop, args=(STATE,), daemon=True)
+        STATE.recv_thread = threading.Thread(target=recv_loop, args=(STATE, connection_token), daemon=True)
         STATE.recv_thread.start()
 
     return {

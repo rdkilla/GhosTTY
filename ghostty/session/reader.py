@@ -5,21 +5,30 @@ from ghostty.protocol.constants import KEY_MAP
 from .state import SessionState
 
 
-def recv_loop(state: SessionState) -> None:
-    while not state.stop_event.is_set() and state.socket_obj:
+def recv_loop(state: SessionState, connection_token: int) -> None:
+    while True:
+        with state.lock:
+            if state.connection_token != connection_token or state.stop_event.is_set() or not state.socket_obj:
+                return
+            sock = state.socket_obj
+
         try:
-            data = state.socket_obj.recv(4096)
+            data = sock.recv(4096)
             if not data:
                 with state.lock:
-                    state.connected = False
+                    if state.connection_token == connection_token:
+                        state.connected = False
                 return
             text = data.decode("utf-8", errors="ignore")
             with state.lock:
+                if state.connection_token != connection_token:
+                    return
                 state.stream.feed(text)
                 state.update_revision_if_needed()
         except OSError:
             with state.lock:
-                state.connected = False
+                if state.connection_token == connection_token:
+                    state.connected = False
             return
 
 
