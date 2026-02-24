@@ -1,41 +1,208 @@
-# 👻 GhosTTY v0.1
+# 👻 GhosTTY
 
-GhosTTY v0.1 has one canonical product path:
+GhosTTY is a lightweight **daemon + CLI** system for automating terminal-style telnet workflows through a deterministic JSON interface.
 
-- **`ghosttyd.py`**: single daemon that owns one telnet connection and one terminal screen model.
-- **`./ghostty`**: JSON-first CLI that auto-starts the daemon and exposes the supported commands.
+At runtime, you interact with a single command-line client (`ghostty.py` / `./ghostty`) that talks to a local Unix-socket daemon (`ghosttyd.py`). The daemon owns exactly one live telnet session and one terminal screen model.
 
-All docs and top-level scripts are aligned to this interface only:
+---
 
-- `connect`
-- `session update`
-- `send`
+## What this project provides
 
-## Canonical command set
+- A canonical CLI for machine/agent usage:
+  - `connect`
+  - `session update`
+  - `send`
+- A local daemon that:
+  - maintains one telnet connection,
+  - renders terminal output into a fixed-size text grid via `pyte`,
+  - tracks revision/stability for deterministic reads,
+  - serializes actions to avoid race conditions.
+- JSON-first responses designed for automation.
 
-### `connect`
+---
 
-```bash
-./ghostty connect connect.serionbbs.com
+## Repository layout
+
+```text
+.
+├── ghostty/                  # Core Python package
+│   ├── cli/                  # CLI parser + daemon client/autostart
+│   ├── daemon/               # Unix socket server + command handlers
+│   ├── session/              # Session state, recv loop, stability logic
+│   └── protocol/             # Shared constants and payload helpers
+├── tests/                    # Canonical daemon/CLI tests
+├── experimental/             # Non-canonical experimental app and tests
+├── ghostty.py                # CLI entrypoint script
+├── ghosttyd.py               # Daemon entrypoint script
+├── pyte.py                   # Local shim for pyte import compatibility
+├── Makefile                  # run/lint/test/check helpers
+└── README.md
 ```
 
-### `session update`
+---
 
-```bash
-./ghostty session update --mode latest
-./ghostty session update --mode stable
+## Runtime architecture
+
+```text
+ghostty CLI
+    ↓ (JSON over Unix domain socket)
+ghostty daemon
+    ↓ (telnet socket)
+remote host
+
+Daemon internals:
+  recv thread → pyte.Stream/Screen → fixed-grid screen payload
+                          ↓
+                   stability/revision engine
 ```
 
-### `send`
+Key behavior:
+
+- **Single session model**: one active connection in process-global state.
+- **Fixed grid output**: responses include `screen.w`, `screen.h`, and space-padded `screen.text` lines.
+- **Stability semantics**:
+  - `latest` returns immediately.
+  - `stable` waits until screen changes settle for `stable_ms`.
+- **Fatal disconnects**: if the socket drops, responses return `connection_lost`; no auto-reconnect.
+
+---
+
+## Installation
+
+### Requirements
+
+- Python 3.10+
+- `pip`
+
+### Setup
 
 ```bash
-./ghostty send --key Enter
-./ghostty send --actions '[{"k":"key","key":"Down","n":2}]'
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-## Single source of truth: run + test
+---
 
-Use only the top-level Python workflow below for v0.1:
+## Quick start
+
+### 1) Check CLI wiring
+
+```bash
+python3 ghostty.py --help
+```
+
+### 2) Connect to a telnet host
+
+```bash
+python3 ghostty.py connect connect.serionbbs.com
+```
+
+Optional terminal size:
+
+```bash
+python3 ghostty.py connect connect.serionbbs.com --width 100 --height 30
+```
+
+### 3) Fetch screen state
+
+Immediate snapshot:
+
+```bash
+python3 ghostty.py session update --mode latest
+```
+
+Wait for stable:
+
+```bash
+python3 ghostty.py session update --mode stable --stable-ms 650 --max-wait-ms 9000
+```
+
+### 4) Send input
+
+Single key:
+
+```bash
+python3 ghostty.py send --key Enter
+```
+
+Action bundle:
+
+```bash
+python3 ghostty.py send --actions '[{"k":"key","key":"Down","n":2},{"k":"type","text":"hello"}]'
+```
+
+---
+
+## CLI reference
+
+## `connect`
+
+```bash
+python3 ghostty.py connect <host> [--port 23] [--width 80] [--height 24]
+```
+
+Creates/replaces the current daemon session and starts a recv loop.
+
+## `session update`
+
+```bash
+python3 ghostty.py session update [--mode latest|stable] [--stable-ms 650] [--max-wait-ms 9000]
+```
+
+Returns current screen/cursor/revision/hints payload.
+
+## `send`
+
+```bash
+python3 ghostty.py send [--key <Enter|Esc|Backspace|Tab|Up|Down|Left|Right>] [--actions '<json>'] [--stable-ms 650] [--max-wait-ms 9000]
+```
+
+Valid action schema:
+
+- `{"k":"key","key":"Enter","n":1}`
+- `{"k":"type","text":"some text"}`
+
+`send` validates actions, writes to telnet, waits for stability, and then returns updated screen state.
+
+---
+
+## JSON response shape (typical)
+
+Success example:
+
+```json
+{
+  "ok": true,
+  "stable": false,
+  "screen_rev": 12,
+  "cursor": { "x": 5, "y": 10 },
+  "screen": {
+    "w": 80,
+    "h": 24,
+    "text": ["... 24 padded lines ..."]
+  },
+  "hints": {
+    "mode": "menu",
+    "prompt": ">",
+    "choices": [{"key":"1","label":"Messages"}],
+    "pager": false
+  }
+}
+```
+
+Common error payloads:
+
+- `{"ok": false, "error": "connection_lost", "state": "disconnected"}`
+- `{"ok": false, "error": "timeout_waiting_stable"}`
+- `{"ok": false, "error": "invalid_action"}`
+- `{"ok": false, "error": "unknown_command"}`
+
+---
+
+## Development workflow
+
+Use the canonical targets:
 
 ```bash
 make run
@@ -44,46 +211,32 @@ make test
 make check
 ```
 
-Equivalent direct commands:
+Direct equivalents:
 
 ```bash
-./ghostty --help
-python3 -m py_compile ghostty ghosttyd.py pyte.py
+python3 ghostty.py --help
+python3 -m py_compile ghostty.py ghosttyd.py pyte.py
 python3 -m pytest -q tests
 ```
 
-## Runtime model (v0.1)
+---
 
-```text
-ghostty CLI
-    ↓
-local daemon (auto-start)
-    ↓
-Telnet socket
-    ↓
-pyte Stream → pyte Screen
-    ↓
-Screen Buffer + Stability Engine
-```
+## Current scope and non-goals
 
-Core behavior:
+This repository is intentionally scoped to a deterministic v0.1 daemon/CLI flow.
 
-- Single daemon-managed session.
-- Fixed-grid screen payload (`w`, `h`, padded `text`).
-- `send` waits for stable state before returning.
-- Disconnects are fatal (`connection_lost`), no auto-reconnect.
+Out of scope for canonical behavior:
 
-## Architecture Decision (v0.1 scope)
+- Multi-session orchestration
+- SSH transport
+- Auto-reconnect / resume
+- HTTP API as top-level product interface
 
-We intentionally exclude non-canonical surfaces from the mainline product to keep agent control deterministic and supportable:
+The `experimental/` tree contains alternate ideas that are not part of the canonical run/test contract.
 
-- **FastAPI app** is moved to `experimental/app/` and not part of v0.1 run/test contracts.
-- **Node CLI path** is removed from top-level build/test targets.
+---
 
-Why:
+## Notes
 
-1. v0.1 requires one authoritative command surface for agents.
-2. Parallel entrypoints (HTTP API + Node CLI + Python CLI) create divergence in behavior, docs, and tests.
-3. A single daemon/CLI contract (`connect`, `session update`, `send`) keeps behavior auditable and reproducible.
-
-Experimental work can continue under `experimental/` without changing the canonical v0.1 interface.
+- Daemon socket path defaults to `/tmp/ghosttyd.sock` (override via `GHOSTTY_SOCKET`).
+- CLI will autostart daemon if unavailable.
