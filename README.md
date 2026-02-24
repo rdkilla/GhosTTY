@@ -1,27 +1,58 @@
 # 👻 GhosTTY v0.1
 
-GhosTTY is a **daemon-backed, screen-aware terminal operator** designed for LLM/agent control.
+GhosTTY v0.1 has one canonical product path:
 
-It provides a single shared telnet session, a deterministic terminal screen model, and a JSON-first CLI contract so both humans and agents can drive the same session safely and predictably.
+- **`ghosttyd.py`**: single daemon that owns one telnet connection and one terminal screen model.
+- **`./ghostty`**: JSON-first CLI that auto-starts the daemon and exposes the supported commands.
 
----
+All docs and top-level scripts are aligned to this interface only:
 
-## What GhosTTY is
+- `connect`
+- `session update`
+- `send`
 
-GhosTTY splits into two pieces:
+## Canonical command set
 
-1. **`ghosttyd` daemon**
-   - Owns one telnet connection.
-   - Owns one terminal screen buffer.
-   - Tracks revisions and stability.
-   - Serializes incoming actions.
+### `connect`
 
-2. **`ghostty` CLI**
-   - Agent-facing command interface.
-   - Auto-starts daemon when needed.
-   - Sends one command and receives one deterministic JSON reply.
+```bash
+./ghostty connect connect.serionbbs.com
+```
 
-This gives a stable control plane for automation:
+### `session update`
+
+```bash
+./ghostty session update --mode latest
+./ghostty session update --mode stable
+```
+
+### `send`
+
+```bash
+./ghostty send --key Enter
+./ghostty send --actions '[{"k":"key","key":"Down","n":2}]'
+```
+
+## Single source of truth: run + test
+
+Use only the top-level Python workflow below for v0.1:
+
+```bash
+make run
+make lint
+make test
+make check
+```
+
+Equivalent direct commands:
+
+```bash
+./ghostty --help
+python3 -m py_compile ghostty ghosttyd.py pyte.py
+python3 -m pytest -q tests
+```
+
+## Runtime model (v0.1)
 
 ```text
 ghostty CLI
@@ -35,174 +66,24 @@ pyte Stream → pyte Screen
 Screen Buffer + Stability Engine
 ```
 
----
+Core behavior:
 
-## Core behavior (v0.1)
+- Single daemon-managed session.
+- Fixed-grid screen payload (`w`, `h`, padded `text`).
+- `send` waits for stable state before returning.
+- Disconnects are fatal (`connection_lost`), no auto-reconnect.
 
-- **Single source of truth**
-  - One daemon, one telnet connection, one screen buffer.
-- **Agent-first JSON output**
-  - All CLI replies are JSON.
-- **Full fixed grid output**
-  - Every screen snapshot returns full `w × h` lines, padded with spaces.
-- **Synchronous step model**
-  - `send` executes actions and waits for the next stable screen before returning.
-- **Fatal disconnect semantics**
-  - No auto-reconnect. Disconnect returns `connection_lost`.
+## Architecture Decision (v0.1 scope)
 
----
+We intentionally exclude non-canonical surfaces from the mainline product to keep agent control deterministic and supportable:
 
-## Program outline (implementation sketch)
+- **FastAPI app** is moved to `experimental/app/` and not part of v0.1 run/test contracts.
+- **Node CLI path** is removed from top-level build/test targets.
 
-### `ghosttyd.py` (daemon)
+Why:
 
-- **`SessionState`**
-  - Holds connection metadata (`connected`, `host`, `port`).
-  - Holds terminal model (`screen`, `stream`, `width`, `height`).
-  - Holds revision/stability tracking (`screen_rev`, `stable_rev`, timestamps).
-  - Holds synchronization primitives (`lock`, `action_lock`).
+1. v0.1 requires one authoritative command surface for agents.
+2. Parallel entrypoints (HTTP API + Node CLI + Python CLI) create divergence in behavior, docs, and tests.
+3. A single daemon/CLI contract (`connect`, `session update`, `send`) keeps behavior auditable and reproducible.
 
-- **Input path**
-  - Telnet bytes read in recv loop.
-  - Bytes decoded and fed into stream/screen.
-  - Screen signature (`text + cursor`) recomputed.
-  - Revision increments on meaningful change.
-
-- **Stability engine**
-  - Stable when `(now - last_change_ts) >= stable_ms`.
-  - Defaults:
-    - `stable_ms = 650`
-    - `max_wait_ms = 9000`
-
-- **Action execution**
-  - Supports action bundle schema:
-    - `{ "k": "key", "key": "Enter" }`
-    - `{ "k": "key", "key": "Down", "n": 3 }`
-    - `{ "k": "type", "text": "hello" }`
-  - Key support (v0.1): `Enter`, `Esc`, `Backspace`, `Tab`, arrows.
-
-- **Control API handlers**
-  - `connect`
-  - `session_update` (`latest` or `stable`)
-  - `send`
-
-- **Hint extraction (heuristic)**
-  - Returns `mode` (`prompt|menu|pager|unknown`) and optional prompt/choices flags.
-
-### `ghostty` (CLI)
-
-- Parses command line.
-- Builds JSON payloads.
-- Sends payload to daemon over Unix socket.
-- Prints JSON response.
-- Auto-starts daemon if socket is unavailable.
-
-### `pyte.py` (local terminal model)
-
-- Minimal in-repo `pyte`-compatible subset used by this prototype environment:
-  - `Screen`
-  - `Stream`
-  - cursor movement + basic control handling.
-
----
-
-## CLI commands
-
-### Connect
-
-```bash
-./ghostty connect connect.serionbbs.com
-```
-
-Example response:
-
-```json
-{
-  "ok": true,
-  "connected": true,
-  "host": "connect.serionbbs.com",
-  "screen_rev": 0
-}
-```
-
-### Session update
-
-Non-blocking:
-
-```bash
-./ghostty session update --mode latest
-```
-
-Blocking until stable:
-
-```bash
-./ghostty session update --mode stable
-```
-
-### Send
-
-Single key:
-
-```bash
-./ghostty send --key Enter
-```
-
-Action bundle:
-
-```bash
-./ghostty send --actions '[{"k":"key","key":"Down","n":2}]'
-```
-
-`send` is synchronous and returns the next stable (or timed-out latest) screen state.
-
----
-
-## Screen payload contract
-
-Each update returns full-grid screen data:
-
-```json
-{
-  "w": 80,
-  "h": 24,
-  "text": [
-    "exactly 80 chars per line",
-    "... 24 lines total ..."
-  ]
-}
-```
-
-Also includes cursor coordinates:
-
-```json
-"cursor": { "x": 12, "y": 22 }
-```
-
-Coordinates are 0-based.
-
----
-
-## Failure behavior
-
-On connection loss:
-
-```json
-{
-  "ok": false,
-  "error": "connection_lost",
-  "state": "disconnected"
-}
-```
-
-No automatic reconnect is attempted.
-
----
-
-## Run locally
-
-```bash
-python3 -m pytest -q
-./ghostty session update --mode latest
-```
-
-> Note: This repository uses an in-repo `pyte.py` compatibility implementation so the prototype can run in restricted environments.
+Experimental work can continue under `experimental/` without changing the canonical v0.1 interface.

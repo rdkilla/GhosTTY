@@ -1,10 +1,12 @@
-.PHONY: run lint test
+.PHONY: run test lint check
 
 run:
-	npm run run
-
-lint:
-	npm run lint
+	./ghostty --help
 
 test:
-	npm test
+	python3 -m pytest -q tests
+
+lint:
+	python3 -m py_compile ghostty ghosttyd.py pyte.py
+
+check: lint test
