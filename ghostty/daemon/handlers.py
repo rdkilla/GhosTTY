@@ -87,12 +87,15 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
         if not STATE.connected:
             return disconnected_payload()
 
+    ok = True
     if mode == "stable":
-        wait_for_stable(state=STATE, stable_ms=stable_ms, max_wait_ms=max_wait_ms)
+        ok = wait_for_stable(state=STATE, stable_ms=stable_ms, max_wait_ms=max_wait_ms)
 
     with STATE.lock:
         if not STATE.connected:
             return disconnected_payload()
+        if not ok:
+            return {"ok": False, "error": "timeout_waiting_stable"}
         text = STATE.render_text()
         return {
             "ok": True,
@@ -120,5 +123,10 @@ def handle_send(req: dict[str, Any]) -> dict[str, Any]:
             if not STATE.connected:
                 return disconnected_payload()
         send_actions(state=STATE, actions=actions)
-        wait_for_stable(state=STATE, stable_ms=stable_ms, max_wait_ms=max_wait_ms)
+        ok = wait_for_stable(state=STATE, stable_ms=stable_ms, max_wait_ms=max_wait_ms)
+        if not ok:
+            with STATE.lock:
+                if not STATE.connected:
+                    return disconnected_payload()
+            return {"ok": False, "error": "timeout_waiting_stable"}
         return handle_session_update({"mode": "latest"})
