@@ -1,53 +1,10 @@
-#!/usr/bin/env python3
 import argparse
 import json
-import os
-import socket
-import subprocess
-import sys
-import time
-from typing import Any
 
-SOCKET_PATH = os.environ.get("GHOSTTY_SOCKET", "/tmp/ghosttyd.sock")
-DAEMON_CMD = [sys.executable, os.path.join(os.path.dirname(__file__), "ghosttyd.py")]
+from .client import daemon_request
 
 
-def daemon_request(payload: dict[str, Any], autostart: bool = True) -> dict[str, Any]:
-    try:
-        return _request(payload)
-    except OSError:
-        if not autostart:
-            raise
-        start_daemon()
-        return _request(payload)
-
-
-def _request(payload: dict[str, Any]) -> dict[str, Any]:
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-        sock.connect(SOCKET_PATH)
-        sock.sendall((json.dumps(payload) + "\n").encode("utf-8"))
-        data = b""
-        while not data.endswith(b"\n"):
-            part = sock.recv(65536)
-            if not part:
-                break
-            data += part
-    return json.loads(data.decode("utf-8").strip())
-
-
-def start_daemon() -> None:
-    subprocess.Popen(DAEMON_CMD, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    deadline = time.time() + 5
-    while time.time() < deadline:
-        try:
-            _request({"cmd": "ping"})
-            return
-        except OSError:
-            time.sleep(0.1)
-    raise RuntimeError("failed to start daemon")
-
-
-def print_json(payload: dict[str, Any]) -> None:
+def print_json(payload: dict) -> None:
     print(json.dumps(payload, indent=2))
 
 
@@ -106,7 +63,3 @@ def main() -> None:
 
     resp = daemon_request(payload)
     print_json(resp)
-
-
-if __name__ == "__main__":
-    main()
