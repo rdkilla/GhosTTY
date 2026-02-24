@@ -3,11 +3,42 @@ import threading
 import time
 from typing import Any
 
-from ghostty.protocol.constants import DEFAULT_MAX_WAIT_MS, DEFAULT_STABLE_MS
+from ghostty.protocol.constants import DEFAULT_MAX_WAIT_MS, DEFAULT_STABLE_MS, KEY_MAP
 from ghostty.protocol.schemas import disconnected_payload
 from ghostty.session import SessionState, recv_loop, send_actions, wait_for_stable
 
 STATE = SessionState()
+
+
+def _validate_actions(actions: Any) -> bool:
+    if not isinstance(actions, list) or len(actions) == 0:
+        return False
+
+    for action in actions:
+        if not isinstance(action, dict):
+            return False
+
+        kind = action.get("k")
+        if kind not in {"key", "type"}:
+            return False
+
+        if "n" in action:
+            try:
+                n = int(action["n"])
+            except (TypeError, ValueError):
+                return False
+            if n < 1:
+                return False
+
+        if kind == "key":
+            key = action.get("key")
+            if not isinstance(key, str) or key not in KEY_MAP:
+                return False
+        elif kind == "type":
+            if not isinstance(action.get("text"), str):
+                return False
+
+    return True
 
 
 def extract_hints(text_lines: list[str]) -> dict[str, Any]:
@@ -118,11 +149,17 @@ def handle_send(req: dict[str, Any]) -> dict[str, Any]:
         else:
             actions = []
 
+    if not _validate_actions(actions):
+        return {"ok": False, "error": "invalid_action"}
+
     with STATE.action_lock:
         with STATE.lock:
             if not STATE.connected:
                 return disconnected_payload()
-        send_actions(state=STATE, actions=actions)
+        try:
+            send_actions(state=STATE, actions=actions)
+        except ValueError:
+            return {"ok": False, "error": "invalid_action"}
         ok = wait_for_stable(state=STATE, stable_ms=stable_ms, max_wait_ms=max_wait_ms)
         if not ok:
             with STATE.lock:

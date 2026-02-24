@@ -106,3 +106,63 @@ def test_cli_prints_timeout_error_json_unchanged(capsys, monkeypatch):
     out = capsys.readouterr().out
     assert '"ok": false' in out
     assert '"error": "timeout_waiting_stable"' in out
+
+
+def test_send_rejects_unsupported_key(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    payload = handle_send({"actions": [{"k": "key", "key": "NotARealKey"}]})
+
+    assert payload == {"ok": False, "error": "invalid_action"}
+
+
+def test_send_rejects_unknown_action_kind(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    payload = handle_send({"actions": [{"k": "noop"}]})
+
+    assert payload == {"ok": False, "error": "invalid_action"}
+
+
+def test_send_rejects_missing_required_fields(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    payload_key = handle_send({"actions": [{"k": "key"}]})
+    payload_type = handle_send({"actions": [{"k": "type"}]})
+
+    assert payload_key == {"ok": False, "error": "invalid_action"}
+    assert payload_type == {"ok": False, "error": "invalid_action"}
+
+
+def test_send_rejects_empty_actions_payload(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    payload = handle_send({"actions": []})
+
+    assert payload == {"ok": False, "error": "invalid_action"}
+
+
+def test_send_converts_send_actions_value_error(monkeypatch):
+    def fake_send_actions(**kwargs):
+        raise ValueError("unsupported action kind: nope")
+
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+    monkeypatch.setattr(handlers, "send_actions", fake_send_actions)
+
+    payload = handle_send({"actions": [{"k": "key", "key": "Enter"}]})
+
+    assert payload == {"ok": False, "error": "invalid_action"}
+
+
+def test_send_rejects_non_positive_repeat_count(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    payload = handle_send({"actions": [{"k": "key", "key": "Enter", "n": 0}]})
+
+    assert payload == {"ok": False, "error": "invalid_action"}
