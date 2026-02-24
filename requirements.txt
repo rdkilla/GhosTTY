@@ -1,0 +1,2 @@
+# No external runtime dependencies required for the prototype.
+# Install pytest for tests if needed.
