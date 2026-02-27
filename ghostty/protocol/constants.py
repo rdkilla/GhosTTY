@@ -3,6 +3,7 @@ import os
 SOCKET_PATH = os.environ.get("GHOSTTY_SOCKET", "/tmp/ghosttyd.sock")
 DEFAULT_STABLE_MS = 650
 DEFAULT_MAX_WAIT_MS = 9000
+DEFAULT_STABLE_WARMUP_MS = 2000
 
 ERR_UNKNOWN_COMMAND = "unknown_command"
 ERR_CONNECTION_LOST = "connection_lost"

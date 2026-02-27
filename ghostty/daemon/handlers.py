@@ -3,7 +3,12 @@ import threading
 import time
 from typing import Any
 
-from ghostty.protocol.constants import DEFAULT_MAX_WAIT_MS, DEFAULT_STABLE_MS, KEY_MAP
+from ghostty.protocol.constants import (
+    DEFAULT_MAX_WAIT_MS,
+    DEFAULT_STABLE_MS,
+    DEFAULT_STABLE_WARMUP_MS,
+    KEY_MAP,
+)
 from ghostty.protocol.schemas import disconnected_payload
 from ghostty.session import SessionState, recv_loop, send_actions, wait_for_stable
 
@@ -106,6 +111,7 @@ def handle_connect(req: dict[str, Any]) -> dict[str, Any]:
         STATE.configure_screen(width, height)
         STATE.screen_rev = 0
         STATE.stable_rev = 0
+        STATE.first_change_ts = 0.0
 
     sock = socket.create_connection((host, port), timeout=10)
     sock.settimeout(None)
@@ -134,6 +140,7 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
     mode = req.get("mode", "latest")
     stable_ms = int(req.get("stable_ms", DEFAULT_STABLE_MS))
     max_wait_ms = int(req.get("max_wait_ms", DEFAULT_MAX_WAIT_MS))
+    stable_warmup_ms = int(req.get("stable_warmup_ms", DEFAULT_STABLE_WARMUP_MS))
 
     with STATE.lock:
         if not STATE.connected:
@@ -141,7 +148,12 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
 
     ok = True
     if mode == "stable":
-        ok = wait_for_stable(state=STATE, stable_ms=stable_ms, max_wait_ms=max_wait_ms)
+        ok = wait_for_stable(
+            state=STATE,
+            stable_ms=stable_ms,
+            max_wait_ms=max_wait_ms,
+            stable_warmup_ms=stable_warmup_ms,
+        )
 
     with STATE.lock:
         if not STATE.connected:
@@ -162,6 +174,7 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
 def handle_send(req: dict[str, Any]) -> dict[str, Any]:
     stable_ms = int(req.get("stable_ms", DEFAULT_STABLE_MS))
     max_wait_ms = int(req.get("max_wait_ms", DEFAULT_MAX_WAIT_MS))
+    stable_warmup_ms = int(req.get("stable_warmup_ms", DEFAULT_STABLE_WARMUP_MS))
     actions = req.get("actions")
     if not actions:
         key = req.get("key")
@@ -181,7 +194,12 @@ def handle_send(req: dict[str, Any]) -> dict[str, Any]:
             send_actions(state=STATE, actions=actions)
         except ValueError:
             return {"ok": False, "error": "invalid_action"}
-        ok = wait_for_stable(state=STATE, stable_ms=stable_ms, max_wait_ms=max_wait_ms)
+        ok = wait_for_stable(
+            state=STATE,
+            stable_ms=stable_ms,
+            max_wait_ms=max_wait_ms,
+            stable_warmup_ms=stable_warmup_ms,
+        )
         if not ok:
             with STATE.lock:
                 if not STATE.connected:
