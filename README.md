@@ -136,34 +136,127 @@ python3 ghostty.py send --actions '[{"k":"key","key":"Down","n":2},{"k":"type","
 
 ## CLI reference
 
-## `connect`
+The CLI currently exposes **three user-facing commands**:
+
+- `connect`
+- `session update`
+- `send`
+
+You can inspect these at any time with:
+
+```bash
+python3 ghostty.py --help
+python3 ghostty.py connect --help
+python3 ghostty.py session --help
+python3 ghostty.py session update --help
+python3 ghostty.py send --help
+```
+
+### `connect`
 
 ```bash
 python3 ghostty.py connect <host> [--port 23] [--width 80] [--height 24]
 ```
 
-Creates/replaces the current daemon session and starts a recv loop.
+Creates (or replaces) the current daemon session and starts the background receive loop.
 
-## `session update`
+Options:
+
+- `<host>`: telnet hostname or IP to connect to (required).
+- `--port`: telnet port (default `23`).
+- `--width`: terminal width passed to the screen model (default `80`).
+- `--height`: terminal height passed to the screen model (default `24`).
+
+Example:
+
+```bash
+python3 ghostty.py connect connect.serionbbs.com --port 23 --width 100 --height 30
+```
+
+### `session update`
 
 ```bash
 python3 ghostty.py session update [--mode latest|stable] [--stable-ms 650] [--max-wait-ms 9000]
 ```
 
-Returns current screen/cursor/revision/hints payload.
+Returns the current screen/cursor/revision/hints payload.
 
-## `send`
+Options:
+
+- `--mode latest|stable`:
+  - `latest`: return immediately with current state.
+  - `stable`: wait until no screen changes are observed for `stable-ms`.
+- `--stable-ms`: quiet period required to consider the screen stable (default `650`).
+- `--max-wait-ms`: upper bound on waiting for stability (default `9000`).
+
+Examples:
+
+```bash
+python3 ghostty.py session update --mode latest
+python3 ghostty.py session update --mode stable --stable-ms 650 --max-wait-ms 9000
+```
+
+### `send`
 
 ```bash
 python3 ghostty.py send [--key <Enter|Esc|Backspace|Tab|Up|Down|Left|Right>] [--actions '<json>'] [--stable-ms 650] [--max-wait-ms 9000]
 ```
+
+Sends input to the remote session, waits for stability, then returns updated state.
+
+You can use either:
+
+- `--key` for one keypress, or
+- `--actions` for a full action list.
+
+Supported keys:
+
+- `Enter`
+- `Esc`
+- `Backspace`
+- `Tab`
+- `Up`
+- `Down`
+- `Left`
+- `Right`
 
 Valid action schema:
 
 - `{"k":"key","key":"Enter","n":1}`
 - `{"k":"type","text":"some text"}`
 
-`send` validates actions, writes to telnet, waits for stability, and then returns updated screen state.
+Optional action fields:
+
+- `n` repeats a key action (`n >= 1`).
+
+Examples:
+
+```bash
+python3 ghostty.py send --key Enter
+python3 ghostty.py send --actions '[{"k":"key","key":"Down","n":2},{"k":"type","text":"hello"}]'
+```
+
+### Daemon command reference
+
+The daemon has a minimal entrypoint:
+
+```bash
+python3 ghosttyd.py [serve]
+```
+
+- `serve` is optional and defaults to `serve` when omitted.
+- In normal usage, the CLI autostarts the daemon as needed.
+
+### Internal daemon JSON commands
+
+For completeness, the daemon socket protocol accepts:
+
+- `ping`
+- `connect`
+- `session_update`
+- `send`
+
+Most users should prefer the CLI wrappers above.
 
 ---
 
