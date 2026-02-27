@@ -64,6 +64,7 @@ Key behavior:
   - `latest` returns immediately.
   - `stable` waits until screen changes settle for `stable_ms`.
 - **Fatal disconnects**: if the socket drops, responses return `connection_lost`; no auto-reconnect.
+- **I/O diagnostics log**: inbound and outbound telnet bytes are appended to `/tmp/ghostty-io.log` by default. Set `GHOSTTY_IO_LOG` to override the path.
 
 ---
 

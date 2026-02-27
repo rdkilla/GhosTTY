@@ -19,6 +19,7 @@ def recv_loop(state: SessionState, connection_token: int) -> None:
                     if state.connection_token == connection_token:
                         state.connected = False
                 return
+            state.log_io("in", data)
             text = data.decode("utf-8", errors="ignore")
             with state.lock:
                 if state.connection_token != connection_token:
@@ -43,9 +44,12 @@ def send_actions(state: SessionState, actions: list[dict[str, Any]]) -> None:
             if key not in KEY_MAP:
                 raise ValueError(f"unsupported key: {key}")
             payload = KEY_MAP[key].encode("utf-8") * n
+            state.log_io("out", payload)
             state.socket_obj.sendall(payload)
         elif kind == "type":
             text = action.get("text", "")
-            state.socket_obj.sendall(text.encode("utf-8"))
+            payload = text.encode("utf-8")
+            state.log_io("out", payload)
+            state.socket_obj.sendall(payload)
         else:
             raise ValueError(f"unsupported action kind: {kind}")
