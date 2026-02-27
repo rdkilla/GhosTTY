@@ -115,7 +115,7 @@ python3 ghostty.py session update --mode latest
 Wait for stable:
 
 ```bash
-python3 ghostty.py session update --mode stable --stable-ms 650 --max-wait-ms 9000
+python3 ghostty.py session update --mode stable --stable-ms 650 --stable-warmup-ms 2000 --max-wait-ms 9000
 ```
 
 ### 4) Send input
@@ -147,7 +147,7 @@ Creates/replaces the current daemon session and starts a recv loop.
 ## `session update`
 
 ```bash
-python3 ghostty.py session update [--mode latest|stable] [--stable-ms 650] [--max-wait-ms 9000]
+python3 ghostty.py session update [--mode latest|stable] [--stable-ms 650] [--stable-warmup-ms 2000] [--max-wait-ms 9000]
 ```
 
 Returns current screen/cursor/revision/hints payload.
@@ -155,7 +155,7 @@ Returns current screen/cursor/revision/hints payload.
 ## `send`
 
 ```bash
-python3 ghostty.py send [--key <Enter|Esc|Backspace|Tab|Up|Down|Left|Right>] [--actions '<json>'] [--stable-ms 650] [--max-wait-ms 9000]
+python3 ghostty.py send [--key <Enter|Esc|Backspace|Tab|Up|Down|Left|Right>] [--actions '<json>'] [--stable-ms 650] [--stable-warmup-ms 2000] [--max-wait-ms 9000]
 ```
 
 Valid action schema:

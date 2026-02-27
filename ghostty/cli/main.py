@@ -24,12 +24,14 @@ def main() -> None:
     upd.add_argument("--mode", choices=["latest", "stable"], default="latest")
     upd.add_argument("--stable-ms", type=int, default=650)
     upd.add_argument("--max-wait-ms", type=int, default=9000)
+    upd.add_argument("--stable-warmup-ms", type=int, default=2000)
 
     s = sub.add_parser("send")
     s.add_argument("--key")
     s.add_argument("--actions")
     s.add_argument("--stable-ms", type=int, default=650)
     s.add_argument("--max-wait-ms", type=int, default=9000)
+    s.add_argument("--stable-warmup-ms", type=int, default=2000)
 
     args = parser.parse_args()
 
@@ -47,12 +49,14 @@ def main() -> None:
             "mode": args.mode,
             "stable_ms": args.stable_ms,
             "max_wait_ms": args.max_wait_ms,
+            "stable_warmup_ms": args.stable_warmup_ms,
         }
     elif args.command == "send":
         payload = {
             "cmd": "send",
             "stable_ms": args.stable_ms,
             "max_wait_ms": args.max_wait_ms,
+            "stable_warmup_ms": args.stable_warmup_ms,
         }
         if args.key:
             payload["key"] = args.key

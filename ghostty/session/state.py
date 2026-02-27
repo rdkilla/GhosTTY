@@ -21,6 +21,7 @@ class SessionState:
     stable_rev: int = 0
     last_change_ts: float = field(default_factory=time.time)
     last_stable_ts: float = field(default_factory=time.time)
+    first_change_ts: float = 0.0
     socket_obj: socket.socket | None = None
     recv_thread: threading.Thread | None = None
     stop_event: threading.Event = field(default_factory=threading.Event)
@@ -52,9 +53,12 @@ class SessionState:
     def update_revision_if_needed(self) -> None:
         new_sig = self.compute_signature()
         if new_sig != self.signature:
+            now = time.time()
+            if self.screen_rev == 0:
+                self.first_change_ts = now
             self.signature = new_sig
             self.screen_rev += 1
-            self.last_change_ts = time.time()
+            self.last_change_ts = now
 
     def screen_payload(self) -> dict[str, Any]:
         return {
