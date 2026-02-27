@@ -3,6 +3,7 @@ from typing import Any
 from ghostty.protocol.constants import KEY_MAP
 
 from .state import SessionState
+from .telnet import parse_telnet_stream
 
 
 def recv_loop(state: SessionState, connection_token: int) -> None:
@@ -20,10 +21,20 @@ def recv_loop(state: SessionState, connection_token: int) -> None:
                         state.connected = False
                 return
             state.log_io("in", data)
-            text = data.decode("utf-8", errors="ignore")
             with state.lock:
                 if state.connection_token != connection_token:
                     return
+                app_data, responses, pending = parse_telnet_stream(
+                    chunk=data,
+                    pending=state.telnet_pending,
+                    width=state.width,
+                    height=state.height,
+                )
+                state.telnet_pending = pending
+                for payload in responses:
+                    state.log_io("out", payload)
+                    sock.sendall(payload)
+                text = app_data.decode("utf-8", errors="ignore")
                 state.stream.feed(text)
                 state.update_revision_if_needed()
         except OSError:

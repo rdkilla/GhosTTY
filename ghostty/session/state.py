@@ -32,12 +32,14 @@ class SessionState:
     action_lock: threading.Lock = field(default_factory=threading.Lock)
     io_log_path: str = field(default_factory=lambda: os.environ.get("GHOSTTY_IO_LOG", "/tmp/ghostty-io.log"))
     io_log_lock: threading.Lock = field(default_factory=threading.Lock)
+    telnet_pending: bytes = b""
 
     def configure_screen(self, width: int, height: int) -> None:
         self.width, self.height = width, height
         self.screen = pyte.Screen(width, height)
         self.stream = pyte.Stream(self.screen)
         self.signature = self.compute_signature()
+        self.telnet_pending = b""
 
     def compute_signature(self) -> str:
         text = "\n".join(self.render_text())
