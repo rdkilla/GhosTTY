@@ -15,15 +15,17 @@ def wait_for_stable(
             if not state.connected:
                 return False
             now = time.time()
+            wait_anchor = max(state.last_change_ts, start)
             since_change = (now - state.last_change_ts) * 1000
+            since_anchor = (now - wait_anchor) * 1000
             if state.screen_rev == 0:
-                if since_change >= stable_ms:
+                if since_change >= stable_ms and since_anchor >= stable_ms:
                     state.stable_rev = state.screen_rev
                     state.last_stable_ts = now
                     return True
             else:
                 stream_age_ms = (now - state.first_change_ts) * 1000 if state.first_change_ts > 0 else 0
-                if stream_age_ms >= stable_warmup_ms and since_change >= stable_ms:
+                if stream_age_ms >= stable_warmup_ms and since_change >= stable_ms and since_anchor >= stable_ms:
                     state.stable_rev = state.screen_rev
                     state.last_stable_ts = now
                     return True

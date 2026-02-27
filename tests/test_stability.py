@@ -27,3 +27,18 @@ def test_wait_for_stable_returns_after_warmup_and_idle_time():
 
     assert ok is True
     assert state.stable_rev == 2
+
+
+def test_wait_for_stable_waits_at_least_stable_ms_from_call_time():
+    state = SessionState(connected=True)
+    now = time.time()
+    state.screen_rev = 5
+    state.first_change_ts = now - 5
+    state.last_change_ts = now - 5
+
+    start = time.time()
+    ok = wait_for_stable(state=state, stable_ms=80, max_wait_ms=200, stable_warmup_ms=0)
+    elapsed_ms = (time.time() - start) * 1000
+
+    assert ok is True
+    assert elapsed_ms >= 70
