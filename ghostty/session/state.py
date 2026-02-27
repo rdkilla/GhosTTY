@@ -1,4 +1,5 @@
 import hashlib
+import os
 import socket
 import threading
 import time
@@ -29,6 +30,8 @@ class SessionState:
     signature: str = ""
     lock: threading.Lock = field(default_factory=threading.Lock)
     action_lock: threading.Lock = field(default_factory=threading.Lock)
+    io_log_path: str = field(default_factory=lambda: os.environ.get("GHOSTTY_IO_LOG", "/tmp/ghostty-io.log"))
+    io_log_lock: threading.Lock = field(default_factory=threading.Lock)
 
     def configure_screen(self, width: int, height: int) -> None:
         self.width, self.height = width, height
@@ -66,3 +69,11 @@ class SessionState:
             "h": self.height,
             "text": self.render_text(),
         }
+
+    def log_io(self, direction: str, data: bytes) -> None:
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+        escaped = data.decode("utf-8", errors="backslashreplace")
+        line = f"{timestamp}Z dir={direction} len={len(data)} hex={data.hex()} text={escaped!r}\n"
+        with self.io_log_lock:
+            with open(self.io_log_path, "a", encoding="utf-8") as f:
+                f.write(line)

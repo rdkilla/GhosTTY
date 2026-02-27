@@ -166,3 +166,15 @@ def test_send_rejects_non_positive_repeat_count(monkeypatch):
     payload = handle_send({"actions": [{"k": "key", "key": "Enter", "n": 0}]})
 
     assert payload == {"ok": False, "error": "invalid_action"}
+
+
+def test_log_io_writes_hex_and_escaped_text(tmp_path):
+    state = SessionState(io_log_path=str(tmp_path / "io.log"))
+
+    state.log_io("in", b"\x01\x03A")
+
+    content = (tmp_path / "io.log").read_text(encoding="utf-8")
+    assert "dir=in" in content
+    assert "len=3" in content
+    assert "hex=010341" in content
+    assert "'\\x01\\x03A'" in content
