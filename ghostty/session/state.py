@@ -43,6 +43,8 @@ class SessionState:
     io_log_path: str = field(default_factory=resolve_default_io_log_path)
     io_log_lock: threading.Lock = field(default_factory=threading.Lock)
     telnet_pending: bytes = b""
+    io_log_error_count: int = 0
+    last_io_log_error: str | None = None
 
     def configure_screen(self, width: int, height: int) -> None:
         self.width, self.height = width, height
@@ -90,3 +92,8 @@ class SessionState:
             Path(self.io_log_path).parent.mkdir(parents=True, exist_ok=True)
             with open(self.io_log_path, "a", encoding="utf-8") as f:
                 f.write(line)
+
+    def record_io_log_error(self, err: Exception) -> None:
+        with self.io_log_lock:
+            self.io_log_error_count += 1
+            self.last_io_log_error = str(err)

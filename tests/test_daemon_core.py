@@ -2,6 +2,7 @@ from threading import Lock
 
 from ghostty.daemon import handlers
 from ghostty.daemon.handlers import extract_hints, handle_send, handle_session_update
+from ghostty.session import recv_loop
 from ghostty.session.state import SessionState
 
 
