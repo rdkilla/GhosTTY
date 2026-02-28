@@ -10,7 +10,11 @@ At runtime, you interact with a single command-line client (`ghostty.py` / `./gh
 
 - A canonical CLI for machine/agent usage:
   - `connect`
+  - `screen`
+  - `key`
+  - `type`
   - `session update`
+  - `session history`
   - `send`
 - A local daemon that:
   - maintains one telnet connection,
@@ -64,7 +68,8 @@ Key behavior:
   - `latest` returns immediately.
   - `stable` waits until screen changes settle for `stable_ms`.
 - **Fatal disconnects**: if the socket drops, responses return `connection_lost`; no auto-reconnect.
-- **I/O diagnostics log**: inbound and outbound telnet bytes are appended to `./ghostty-io.log` (repo root) by default. Set `GHOSTTY_IO_LOG` or pass `--io-log-path` on `connect` to override the path.
+- **I/O diagnostics log**: inbound and outbound telnet bytes are appended to `./ghostty-io.log` in the repo directory.
+- **Frame history log**: each framebuffer revision is appended as JSONL to `./ghostty-frame-history.jsonl` in the repo directory.
 
 ---
 
@@ -80,10 +85,11 @@ GHOSTTY_DAEMON_VERBOSE=1 python3 ghostty.py connect <host>
 GHOSTTY_DAEMON_LOG=/tmp/my-ghostty-daemon.log python3 ghostty.py connect <host>
 ```
 
-Expected default log locations:
+Log locations:
 
 - Daemon/server log: `/tmp/ghostty-daemon.log` (when enabled).
-- Telnet I/O log: `./ghostty-io.log` (repo root, unless overridden).
+- Telnet I/O log: `./ghostty-io.log` (repo root).
+- Frame history JSONL log: `./ghostty-frame-history.jsonl` (repo root).
 
 ## Installation
 
@@ -127,7 +133,7 @@ python3 ghostty.py connect connect.serionbbs.com --width 100 --height 30
 Immediate snapshot:
 
 ```bash
-python3 ghostty.py session update --mode latest
+python3 ghostty.py screen
 ```
 
 Wait for stable:
@@ -141,7 +147,13 @@ python3 ghostty.py session update --mode stable --stable-ms 650 --stable-warmup-
 Single key:
 
 ```bash
-python3 ghostty.py send --key Enter
+python3 ghostty.py key Enter
+```
+
+Type text:
+
+```bash
+python3 ghostty.py type "hello"
 ```
 
 Action bundle:
@@ -154,10 +166,17 @@ python3 ghostty.py send --actions '[{"k":"key","key":"Down","n":2},{"k":"type","
 
 ## CLI reference
 
-The CLI currently exposes **three user-facing commands**:
+The CLI currently exposes **simple agent commands**:
 
 - `connect`
+- `screen`
+- `key`
+- `type`
+
+It also exposes **advanced/debug commands**:
+
 - `session update`
+- `session history`
 - `send`
 
 You can inspect these at any time with:
@@ -165,15 +184,43 @@ You can inspect these at any time with:
 ```bash
 python3 ghostty.py --help
 python3 ghostty.py connect --help
+python3 ghostty.py screen --help
+python3 ghostty.py key --help
+python3 ghostty.py type --help
 python3 ghostty.py session --help
 python3 ghostty.py session update --help
+python3 ghostty.py session history --help
 python3 ghostty.py send --help
 ```
+
+### `screen`
+
+```bash
+python3 ghostty.py screen
+```
+
+Returns the latest screen snapshot JSON. This is an alias for `session update --mode latest`.
+
+### `key`
+
+```bash
+python3 ghostty.py key <Enter|Esc|Backspace|Tab|Up|Down|Left|Right>
+```
+
+Sends one keypress and returns the updated screen JSON.
+
+### `type`
+
+```bash
+python3 ghostty.py type "<text>"
+```
+
+Types text bytes and returns the updated screen JSON.
 
 ### `connect`
 
 ```bash
-python3 ghostty.py connect <host> [--port 23] [--width 80] [--height 24] [--io-log-path PATH]
+python3 ghostty.py connect <host> [--port 23] [--width 80] [--height 24]
 ```
 
 Creates (or replaces) the current daemon session and starts the background receive loop.
@@ -184,21 +231,20 @@ Options:
 - `--port`: telnet port (default `23`).
 - `--width`: terminal width passed to the screen model (default `80`).
 - `--height`: terminal height passed to the screen model (default `24`).
-- `--io-log-path`: explicit path for the diagnostics log for this session.
 
 Example:
 
 ```bash
-python3 ghostty.py connect connect.serionbbs.com --port 23 --width 100 --height 30 --io-log-path ./logs/session-io.log
+python3 ghostty.py connect connect.serionbbs.com --port 23 --width 100 --height 30
 ```
 
 ### `session update`
 
 ```bash
-python3 ghostty.py session update [--mode latest|stable] [--stable-ms 650] [--stable-warmup-ms 2000] [--max-wait-ms 9000]
+python3 ghostty.py session update [--mode latest|stable] [--stable-ms 650] [--stable-warmup-ms 2000] [--max-wait-ms 9000] [--include-frames] [--frame-limit 20] [--include-char-stream] [--char-limit 8000]
 ```
 
-Returns the current screen/cursor/revision/hints payload. Responses also include a `diag` block with I/O log path and runtime error counters to aid debugging stuck sessions.
+Returns the current screen/cursor/revision/hints payload. Responses also include a `diag` block with I/O log path and runtime error counters to aid debugging stuck sessions. Optional query flags let agents retrieve recent frame-buffer history and a bounded tail of raw decoded application characters.
 
 Options:
 
@@ -207,12 +253,40 @@ Options:
   - `stable`: wait until no screen changes are observed for `stable-ms`.
 - `--stable-ms`: quiet period required to consider the screen stable (default `650`).
 - `--max-wait-ms`: upper bound on waiting for stability (default `9000`).
+- `--include-frames`: include `frames` history from the in-memory frame buffer.
+- `--frame-limit`: max number of recent frames returned when `--include-frames` is set (default `20`).
+- `--include-char-stream`: include `char_stream` with recent raw app characters received from telnet (decoded as CP437, before display normalization).
+- `--char-limit`: max number of recent characters returned in `char_stream.text` when `--include-char-stream` is set (default `8000`).
 
 Examples:
 
 ```bash
 python3 ghostty.py session update --mode latest
 python3 ghostty.py session update --mode stable --stable-ms 650 --max-wait-ms 9000
+python3 ghostty.py session update --mode latest --include-frames --frame-limit 10 --include-char-stream --char-limit 12000
+```
+
+### `session history`
+
+```bash
+python3 ghostty.py session history [--limit 50] [--from-rev N] [--to-rev N] [--include-char-stream] [--char-limit 8000]
+```
+
+Returns a filtered slice of in-memory frame-buffer history for agent reasoning and debugging.
+
+Options:
+
+- `--limit`: max number of frames returned (default `50`).
+- `--from-rev`: optional inclusive lower revision bound.
+- `--to-rev`: optional inclusive upper revision bound.
+- `--include-char-stream`: include the same `char_stream` tail block as `session update`.
+- `--char-limit`: max `char_stream.text` length when included (default `8000`).
+
+Examples:
+
+```bash
+python3 ghostty.py session history --limit 20
+python3 ghostty.py session history --from-rev 100 --to-rev 140 --include-char-stream --char-limit 16000
 ```
 
 ### `send`
@@ -273,6 +347,7 @@ For completeness, the daemon socket protocol accepts:
 - `ping`
 - `connect`
 - `session_update`
+- `session_history`
 - `send`
 
 Most users should prefer the CLI wrappers above.
@@ -281,7 +356,7 @@ Most users should prefer the CLI wrappers above.
 
 ## JSON response shape (typical)
 
-Success example:
+Success example (`frames` and `char_stream` are optional, returned only when requested):
 
 ```json
 {
@@ -299,6 +374,17 @@ Success example:
     "prompt": ">",
     "choices": [{"key":"1","label":"Messages"}],
     "pager": false
+  },
+  "frames": [
+    {"rev": 10, "ts": 1739046200.123, "text": ["..."]},
+    {"rev": 11, "ts": 1739046200.702, "text": ["..."]}
+  ],
+  "char_stream": {
+    "text": "...tail of raw app chars...",
+    "returned_chars": 8000,
+    "buffered_chars": 12000,
+    "total_chars": 25000,
+    "truncated": true
   }
 }
 ```

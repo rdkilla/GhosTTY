@@ -104,21 +104,21 @@ def handle_connect(req: dict[str, Any]) -> dict[str, Any]:
     port = int(req.get("port", 23))
     width = int(req.get("width", 80))
     height = int(req.get("height", 24))
-    io_log_path = req.get("io_log_path")
 
     teardown_connection(STATE)
 
     with STATE.lock:
+        STATE.reset_log_paths()
         STATE.configure_screen(width, height)
         STATE.screen_rev = 0
         STATE.stable_rev = 0
         STATE.first_change_ts = 0.0
         STATE.io_log_error_count = 0
         STATE.last_io_log_error = None
+        STATE.frame_log_error_count = 0
+        STATE.last_frame_log_error = None
         STATE.recv_error_count = 0
         STATE.last_recv_error = None
-        if io_log_path:
-            STATE.io_log_path = str(io_log_path)
 
     sock = socket.create_connection((host, port), timeout=10)
     sock.settimeout(None)
@@ -148,6 +148,10 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
     stable_ms = int(req.get("stable_ms", DEFAULT_STABLE_MS))
     max_wait_ms = int(req.get("max_wait_ms", DEFAULT_MAX_WAIT_MS))
     stable_warmup_ms = int(req.get("stable_warmup_ms", DEFAULT_STABLE_WARMUP_MS))
+    include_frames = bool(req.get("include_frames", False))
+    include_char_stream = bool(req.get("include_char_stream", False))
+    frame_limit = max(0, int(req.get("frame_limit", 20)))
+    char_limit = max(0, int(req.get("char_limit", 8000)))
 
     with STATE.lock:
         if not STATE.connected:
@@ -170,7 +174,7 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
         frame = STATE.latest_frame()
         frame_text = STATE.render_text() if frame is None else frame["text"]
         frame_rev = STATE.screen_rev if frame is None else frame["rev"]
-        return {
+        payload: dict[str, Any] = {
             "ok": True,
             "stable": mode == "stable",
             "screen_rev": frame_rev,
@@ -181,14 +185,67 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
                 "io_log_path": STATE.io_log_path,
                 "io_log_error_count": STATE.io_log_error_count,
                 "last_io_log_error": STATE.last_io_log_error,
+                "frame_log_path": STATE.frame_log_path,
+                "frame_log_error_count": STATE.frame_log_error_count,
+                "last_frame_log_error": STATE.last_frame_log_error,
                 "recv_error_count": STATE.recv_error_count,
                 "last_recv_error": STATE.last_recv_error,
                 "last_change_age_ms": int((time.time() - STATE.last_change_ts) * 1000),
                 "frame_buffer_size": len(STATE.frame_buffer),
                 "frame_buffer_limit": STATE.frame_buffer_limit,
                 "last_frame_rev": STATE.frame_buffer[-1]["rev"] if STATE.frame_buffer else None,
+                "char_stream_buffered_chars": STATE.char_stream_chars,
+                "char_stream_limit": STATE.char_stream_limit,
+                "char_stream_total_chars": STATE.total_app_chars,
             },
         }
+        if include_frames:
+            payload["frames"] = STATE.frames_query(frame_limit)
+        if include_char_stream:
+            payload["char_stream"] = STATE.char_stream_tail(char_limit)
+        return payload
+
+
+def handle_session_history(req: dict[str, Any]) -> dict[str, Any]:
+    limit = max(0, int(req.get("limit", 50)))
+    include_char_stream = bool(req.get("include_char_stream", False))
+    char_limit = max(0, int(req.get("char_limit", 8000)))
+    from_rev_raw = req.get("from_rev")
+    to_rev_raw = req.get("to_rev")
+    from_rev = int(from_rev_raw) if from_rev_raw is not None else None
+    to_rev = int(to_rev_raw) if to_rev_raw is not None else None
+
+    with STATE.lock:
+        frames = STATE.frames_query(limit=limit, from_rev=from_rev, to_rev=to_rev)
+        payload: dict[str, Any] = {
+            "ok": True,
+            "connected": STATE.connected,
+            "host": STATE.host,
+            "port": STATE.port,
+            "screen_rev": STATE.screen_rev,
+            "stable_rev": STATE.stable_rev,
+            "frame_count": len(frames),
+            "frames": frames,
+            "diag": {
+                "io_log_path": STATE.io_log_path,
+                "io_log_error_count": STATE.io_log_error_count,
+                "last_io_log_error": STATE.last_io_log_error,
+                "frame_log_path": STATE.frame_log_path,
+                "frame_log_error_count": STATE.frame_log_error_count,
+                "last_frame_log_error": STATE.last_frame_log_error,
+                "recv_error_count": STATE.recv_error_count,
+                "last_recv_error": STATE.last_recv_error,
+                "frame_buffer_size": len(STATE.frame_buffer),
+                "frame_buffer_limit": STATE.frame_buffer_limit,
+                "last_frame_rev": STATE.frame_buffer[-1]["rev"] if STATE.frame_buffer else None,
+                "char_stream_buffered_chars": STATE.char_stream_chars,
+                "char_stream_limit": STATE.char_stream_limit,
+                "char_stream_total_chars": STATE.total_app_chars,
+            },
+        }
+        if include_char_stream:
+            payload["char_stream"] = STATE.char_stream_tail(char_limit)
+        return payload
 
 
 def handle_send(req: dict[str, Any]) -> dict[str, Any]:

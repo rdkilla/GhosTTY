@@ -6,7 +6,7 @@ from typing import Any
 
 from ghostty.protocol.constants import ERR_UNKNOWN_COMMAND, SOCKET_PATH
 
-from .handlers import handle_connect, handle_send, handle_session_update
+from .handlers import handle_connect, handle_send, handle_session_history, handle_session_update
 
 LOGGER = logging.getLogger("ghostty.daemon")
 
@@ -53,6 +53,8 @@ class Handler(socketserver.StreamRequestHandler):
                 self.respond(handle_connect(req), cmd=cmd)
             elif cmd == "session_update":
                 self.respond(handle_session_update(req), cmd=cmd)
+            elif cmd == "session_history":
+                self.respond(handle_session_history(req), cmd=cmd)
             elif cmd == "send":
                 self.respond(handle_send(req), cmd=cmd)
             else:

@@ -48,6 +48,12 @@ def _decode_terminal_text(data: bytes) -> str:
     return _strip_synchronet_ctrl_a(text)
 
 
+def _decode_raw_app_text(data: bytes) -> str:
+    """Decode raw application bytes without display normalization."""
+
+    return data.decode("cp437", errors="replace")
+
+
 def recv_loop(state: SessionState, connection_token: int) -> None:
     while True:
         with state.lock:
@@ -83,6 +89,7 @@ def recv_loop(state: SessionState, connection_token: int) -> None:
                     except OSError as err:
                         state.record_io_log_error(err)
                     sock.sendall(payload)
+                state.append_char_stream(_decode_raw_app_text(app_data))
                 text = _decode_terminal_text(app_data)
                 state.stream.feed(text)
                 state.update_revision_if_needed()
