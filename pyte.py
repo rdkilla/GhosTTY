@@ -23,6 +23,11 @@ class Screen:
     def display(self):
         return ["".join(row) for row in self._grid]
 
+    def scroll_up(self, lines: int = 1):
+        for _ in range(max(0, lines)):
+            self._grid.pop(0)
+            self._grid.append([" " for _ in range(self.columns)])
+
 
 class Stream:
     def __init__(self, screen: Screen | None = None):
@@ -50,7 +55,10 @@ class Stream:
             elif ch == "\r":
                 self.screen.cursor.x = 0
             elif ch == "\n":
-                self.screen.cursor.y = min(self.screen.lines - 1, self.screen.cursor.y + 1)
+                if self.screen.cursor.y >= self.screen.lines - 1:
+                    self.screen.scroll_up(1)
+                else:
+                    self.screen.cursor.y += 1
             elif ch == "\x08":
                 self.screen.cursor.x = max(0, self.screen.cursor.x - 1)
             else:
@@ -66,7 +74,11 @@ class Stream:
             self.screen._grid[y][x] = ch
         if x + 1 >= self.screen.columns:
             self.screen.cursor.x = 0
-            self.screen.cursor.y = min(self.screen.lines - 1, y + 1)
+            if y >= self.screen.lines - 1:
+                self.screen.scroll_up(1)
+                self.screen.cursor.y = self.screen.lines - 1
+            else:
+                self.screen.cursor.y = y + 1
         else:
             self.screen.cursor.x += 1
 
