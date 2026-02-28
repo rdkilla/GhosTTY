@@ -18,6 +18,7 @@ def main() -> None:
     c.add_argument("--port", type=int, default=23)
     c.add_argument("--width", type=int, default=80)
     c.add_argument("--height", type=int, default=24)
+    c.add_argument("--io-log-path")
 
     sess = sub.add_parser("session")
     sess_sub = sess.add_subparsers(dest="session_cmd", required=True)
@@ -43,6 +44,7 @@ def main() -> None:
             "port": args.port,
             "width": args.width,
             "height": args.height,
+            "io_log_path": args.io_log_path,
         }
     elif args.command == "session" and args.session_cmd == "update":
         payload = {

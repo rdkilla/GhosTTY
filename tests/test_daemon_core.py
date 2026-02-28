@@ -2,6 +2,7 @@ from threading import Lock
 
 from ghostty.daemon import handlers
 from ghostty.daemon.handlers import extract_hints, handle_send, handle_session_update
+from ghostty.session import recv_loop
 from ghostty.session.state import SessionState
 
 
@@ -178,3 +179,75 @@ def test_log_io_writes_hex_and_escaped_text(tmp_path):
     assert "len=3" in content
     assert "hex=010341" in content
     assert "'\\x01\\x03A'" in content
+
+
+def test_default_io_log_path_is_repo_local(monkeypatch):
+    monkeypatch.delenv("GHOSTTY_IO_LOG", raising=False)
+
+    state = SessionState()
+
+    assert state.io_log_path.endswith("ghostty-io.log")
+    assert not state.io_log_path.startswith("/tmp/")
+
+
+def test_cli_connect_passes_io_log_path(monkeypatch):
+    import importlib
+
+    cli_main_module = importlib.import_module("ghostty.cli.main")
+    captured = {}
+
+    def fake_daemon_request(payload):
+        captured["payload"] = payload
+        return {"ok": True}
+
+    monkeypatch.setattr(cli_main_module, "daemon_request", fake_daemon_request)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "ghostty",
+            "connect",
+            "example.com",
+            "--io-log-path",
+            "./logs/custom.log",
+        ],
+    )
+
+    cli_main_module.main()
+
+    assert captured["payload"]["io_log_path"] == "./logs/custom.log"
+
+
+def test_handle_connect_applies_io_log_path(monkeypatch):
+    class DummySocket:
+        def settimeout(self, _timeout):
+            return None
+
+        def close(self):
+            return None
+
+    class DummyThread:
+        def __init__(self, target=None, args=(), daemon=None):
+            self.target = target
+            self.args = args
+            self.daemon = daemon
+
+        def start(self):
+            return None
+
+        def is_alive(self):
+            return False
+
+        def join(self, timeout=None):
+            return None
+
+    state = SessionState()
+    monkeypatch.setattr(handlers, "STATE", state)
+    monkeypatch.setattr(handlers, "teardown_connection", lambda _state: None)
+    monkeypatch.setattr(handlers.socket, "create_connection", lambda *args, **kwargs: DummySocket())
+    monkeypatch.setattr(handlers.threading, "Thread", DummyThread)
+
+    payload = handlers.handle_connect({"host": "example.com", "io_log_path": "./logs/session.log"})
+
+    assert payload["ok"] is True
+    assert state.io_log_path == "./logs/session.log"
+
