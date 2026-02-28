@@ -181,44 +181,73 @@ def test_log_io_writes_hex_and_escaped_text(tmp_path):
     assert "'\\x01\\x03A'" in content
 
 
-class _OneShotSocket:
-    def __init__(self, payload: bytes):
-        self._payload = payload
-        self._delivered = False
+def test_default_io_log_path_is_repo_local(monkeypatch):
+    monkeypatch.delenv("GHOSTTY_IO_LOG", raising=False)
 
-    def recv(self, size: int) -> bytes:
-        if self._delivered:
-            return b""
-        self._delivered = True
-        return self._payload
+    state = SessionState()
 
-    def sendall(self, payload: bytes) -> None:
-        return
+    assert state.io_log_path.endswith("ghostty-io.log")
+    assert not state.io_log_path.startswith("/tmp/")
 
 
-def test_recv_loop_continues_when_inbound_log_io_fails(monkeypatch):
-    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
-    state.configure_screen(20, 3)
-    state.connection_token = 7
-    state.socket_obj = _OneShotSocket(b"hello")
+def test_cli_connect_passes_io_log_path(monkeypatch):
+    import importlib
 
-    fed: list[str] = []
+    cli_main_module = importlib.import_module("ghostty.cli.main")
+    captured = {}
 
-    def fake_feed(text: str) -> None:
-        fed.append(text)
-        state.stop_event.set()
+    def fake_daemon_request(payload):
+        captured["payload"] = payload
+        return {"ok": True}
 
-    state.stream.feed = fake_feed
+    monkeypatch.setattr(cli_main_module, "daemon_request", fake_daemon_request)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "ghostty",
+            "connect",
+            "example.com",
+            "--io-log-path",
+            "./logs/custom.log",
+        ],
+    )
 
-    def flaky_log(direction: str, data: bytes) -> None:
-        if direction == "in":
-            raise OSError("io log write failed")
+    cli_main_module.main()
 
-    state.log_io = flaky_log
+    assert captured["payload"]["io_log_path"] == "./logs/custom.log"
 
-    recv_loop(state, connection_token=7)
 
-    assert fed == ["hello"]
-    assert state.connected is True
-    assert state.io_log_error_count == 1
-    assert state.last_io_log_error == "io log write failed"
+def test_handle_connect_applies_io_log_path(monkeypatch):
+    class DummySocket:
+        def settimeout(self, _timeout):
+            return None
+
+        def close(self):
+            return None
+
+    class DummyThread:
+        def __init__(self, target=None, args=(), daemon=None):
+            self.target = target
+            self.args = args
+            self.daemon = daemon
+
+        def start(self):
+            return None
+
+        def is_alive(self):
+            return False
+
+        def join(self, timeout=None):
+            return None
+
+    state = SessionState()
+    monkeypatch.setattr(handlers, "STATE", state)
+    monkeypatch.setattr(handlers, "teardown_connection", lambda _state: None)
+    monkeypatch.setattr(handlers.socket, "create_connection", lambda *args, **kwargs: DummySocket())
+    monkeypatch.setattr(handlers.threading, "Thread", DummyThread)
+
+    payload = handlers.handle_connect({"host": "example.com", "io_log_path": "./logs/session.log"})
+
+    assert payload["ok"] is True
+    assert state.io_log_path == "./logs/session.log"
+

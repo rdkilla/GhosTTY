@@ -64,7 +64,7 @@ Key behavior:
   - `latest` returns immediately.
   - `stable` waits until screen changes settle for `stable_ms`.
 - **Fatal disconnects**: if the socket drops, responses return `connection_lost`; no auto-reconnect.
-- **I/O diagnostics log**: inbound and outbound telnet bytes are appended to `/tmp/ghostty-io.log` by default. Set `GHOSTTY_IO_LOG` to override the path.
+- **I/O diagnostics log**: inbound and outbound telnet bytes are appended to `./ghostty-io.log` (repo root) by default. Set `GHOSTTY_IO_LOG` or pass `--io-log-path` on `connect` to override the path.
 
 ---
 
@@ -156,7 +156,7 @@ python3 ghostty.py send --help
 ### `connect`
 
 ```bash
-python3 ghostty.py connect <host> [--port 23] [--width 80] [--height 24]
+python3 ghostty.py connect <host> [--port 23] [--width 80] [--height 24] [--io-log-path PATH]
 ```
 
 Creates (or replaces) the current daemon session and starts the background receive loop.
@@ -167,11 +167,12 @@ Options:
 - `--port`: telnet port (default `23`).
 - `--width`: terminal width passed to the screen model (default `80`).
 - `--height`: terminal height passed to the screen model (default `24`).
+- `--io-log-path`: explicit path for the diagnostics log for this session.
 
 Example:
 
 ```bash
-python3 ghostty.py connect connect.serionbbs.com --port 23 --width 100 --height 30
+python3 ghostty.py connect connect.serionbbs.com --port 23 --width 100 --height 30 --io-log-path ./logs/session-io.log
 ```
 
 ### `session update`

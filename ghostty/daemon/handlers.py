@@ -104,6 +104,7 @@ def handle_connect(req: dict[str, Any]) -> dict[str, Any]:
     port = int(req.get("port", 23))
     width = int(req.get("width", 80))
     height = int(req.get("height", 24))
+    io_log_path = req.get("io_log_path")
 
     teardown_connection(STATE)
 
@@ -112,6 +113,8 @@ def handle_connect(req: dict[str, Any]) -> dict[str, Any]:
         STATE.screen_rev = 0
         STATE.stable_rev = 0
         STATE.first_change_ts = 0.0
+        if io_log_path:
+            STATE.io_log_path = str(io_log_path)
 
     sock = socket.create_connection((host, port), timeout=10)
     sock.settimeout(None)
