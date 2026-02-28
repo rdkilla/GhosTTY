@@ -83,7 +83,7 @@ GHOSTTY_DAEMON_LOG=/tmp/my-ghostty-daemon.log python3 ghostty.py connect <host>
 Expected default log locations:
 
 - Daemon/server log: `/tmp/ghostty-daemon.log` (when enabled).
-- Telnet I/O log: `/tmp/ghostty-io.log`.
+- Telnet I/O log: `./ghostty-io.log` (repo root, unless overridden).
 
 ## Installation
 
@@ -198,7 +198,7 @@ python3 ghostty.py connect connect.serionbbs.com --port 23 --width 100 --height 
 python3 ghostty.py session update [--mode latest|stable] [--stable-ms 650] [--stable-warmup-ms 2000] [--max-wait-ms 9000]
 ```
 
-Returns the current screen/cursor/revision/hints payload.
+Returns the current screen/cursor/revision/hints payload. Responses also include a `diag` block with I/O log path and runtime error counters to aid debugging stuck sessions.
 
 Options:
 

@@ -44,10 +44,17 @@ def recv_loop(state: SessionState, connection_token: int) -> None:
                 text = app_data.decode("utf-8", errors="ignore")
                 state.stream.feed(text)
                 state.update_revision_if_needed()
-        except OSError:
+        except OSError as err:
             with state.lock:
                 if state.connection_token == connection_token:
                     state.connected = False
+                    state.record_recv_error(err)
+            return
+        except Exception as err:
+            with state.lock:
+                if state.connection_token == connection_token:
+                    state.connected = False
+                    state.record_recv_error(err)
             return
 
 
