@@ -45,6 +45,8 @@ class SessionState:
     telnet_pending: bytes = b""
     io_log_error_count: int = 0
     last_io_log_error: str | None = None
+    recv_error_count: int = 0
+    last_recv_error: str | None = None
 
     def configure_screen(self, width: int, height: int) -> None:
         self.width, self.height = width, height
@@ -97,3 +99,8 @@ class SessionState:
         with self.io_log_lock:
             self.io_log_error_count += 1
             self.last_io_log_error = str(err)
+
+    def record_recv_error(self, err: Exception) -> None:
+        with self.io_log_lock:
+            self.recv_error_count += 1
+            self.last_recv_error = str(err)

@@ -113,6 +113,10 @@ def handle_connect(req: dict[str, Any]) -> dict[str, Any]:
         STATE.screen_rev = 0
         STATE.stable_rev = 0
         STATE.first_change_ts = 0.0
+        STATE.io_log_error_count = 0
+        STATE.last_io_log_error = None
+        STATE.recv_error_count = 0
+        STATE.last_recv_error = None
         if io_log_path:
             STATE.io_log_path = str(io_log_path)
 
@@ -171,6 +175,14 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
             "cursor": {"x": STATE.screen.cursor.x, "y": STATE.screen.cursor.y},
             "screen": STATE.screen_payload(),
             "hints": extract_hints(text),
+            "diag": {
+                "io_log_path": STATE.io_log_path,
+                "io_log_error_count": STATE.io_log_error_count,
+                "last_io_log_error": STATE.last_io_log_error,
+                "recv_error_count": STATE.recv_error_count,
+                "last_recv_error": STATE.last_recv_error,
+                "last_change_age_ms": int((time.time() - STATE.last_change_ts) * 1000),
+            },
         }
 
 

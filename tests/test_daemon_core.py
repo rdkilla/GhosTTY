@@ -98,7 +98,7 @@ def test_cli_prints_timeout_error_json_unchanged(capsys, monkeypatch):
     monkeypatch.setattr(
         cli_main_module,
         "daemon_request",
-        lambda payload: {"ok": False, "error": "timeout_waiting_stable"},
+        lambda payload, **kwargs: {"ok": False, "error": "timeout_waiting_stable"},
     )
     monkeypatch.setattr("sys.argv", ["ghostty", "session", "update", "--mode", "stable"])
 
@@ -196,7 +196,7 @@ def test_cli_connect_passes_io_log_path(monkeypatch):
     cli_main_module = importlib.import_module("ghostty.cli.main")
     captured = {}
 
-    def fake_daemon_request(payload):
+    def fake_daemon_request(payload, **kwargs):
         captured["payload"] = payload
         return {"ok": True}
 
@@ -251,3 +251,38 @@ def test_handle_connect_applies_io_log_path(monkeypatch):
     assert payload["ok"] is True
     assert state.io_log_path == "./logs/session.log"
 
+
+
+def test_session_update_includes_diag_block(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    state.configure_screen(10, 3)
+    state.io_log_path = "./logs/io.log"
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    payload = handle_session_update({"mode": "latest"})
+
+    assert payload["ok"] is True
+    assert payload["diag"]["io_log_path"] == "./logs/io.log"
+    assert payload["diag"]["recv_error_count"] == 0
+    assert isinstance(payload["diag"]["last_change_age_ms"], int)
+
+
+def test_recv_loop_records_unexpected_exception(monkeypatch):
+    class BoomSocket:
+        def recv(self, _n):
+            return b"x"
+
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    state.socket_obj = BoomSocket()
+    state.connection_token = 1
+
+    def boom_parse(**_kwargs):
+        raise RuntimeError("parse failed")
+
+    monkeypatch.setattr("ghostty.session.reader.parse_telnet_stream", boom_parse)
+
+    recv_loop(state, connection_token=1)
+
+    assert state.connected is False
+    assert state.recv_error_count == 1
+    assert state.last_recv_error == "parse failed"
