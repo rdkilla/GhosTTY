@@ -167,14 +167,16 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
             return disconnected_payload()
         if not ok:
             return {"ok": False, "error": "timeout_waiting_stable"}
-        text = STATE.render_text()
+        frame = STATE.latest_frame()
+        frame_text = STATE.render_text() if frame is None else frame["text"]
+        frame_rev = STATE.screen_rev if frame is None else frame["rev"]
         return {
             "ok": True,
             "stable": mode == "stable",
-            "screen_rev": STATE.screen_rev,
+            "screen_rev": frame_rev,
             "cursor": {"x": STATE.screen.cursor.x, "y": STATE.screen.cursor.y},
-            "screen": STATE.screen_payload(),
-            "hints": extract_hints(text),
+            "screen": STATE.screen_payload_from_frame(frame),
+            "hints": extract_hints(frame_text),
             "diag": {
                 "io_log_path": STATE.io_log_path,
                 "io_log_error_count": STATE.io_log_error_count,
@@ -182,6 +184,9 @@ def handle_session_update(req: dict[str, Any]) -> dict[str, Any]:
                 "recv_error_count": STATE.recv_error_count,
                 "last_recv_error": STATE.last_recv_error,
                 "last_change_age_ms": int((time.time() - STATE.last_change_ts) * 1000),
+                "frame_buffer_size": len(STATE.frame_buffer),
+                "frame_buffer_limit": STATE.frame_buffer_limit,
+                "last_frame_rev": STATE.frame_buffer[-1]["rev"] if STATE.frame_buffer else None,
             },
         }
 

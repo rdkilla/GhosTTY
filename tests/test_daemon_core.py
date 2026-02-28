@@ -265,6 +265,49 @@ def test_session_update_includes_diag_block(monkeypatch):
     assert payload["diag"]["io_log_path"] == "./logs/io.log"
     assert payload["diag"]["recv_error_count"] == 0
     assert isinstance(payload["diag"]["last_change_age_ms"], int)
+    assert payload["diag"]["frame_buffer_size"] >= 1
+    assert payload["diag"]["frame_buffer_limit"] == state.frame_buffer_limit
+    assert payload["diag"]["last_frame_rev"] == state.frame_buffer[-1]["rev"]
+
+
+
+def test_frame_buffer_tracks_revisions():
+    state = SessionState(frame_buffer_limit=3)
+    state.configure_screen(10, 3)
+
+    # Initial frame captured at rev 0.
+    assert len(state.frame_buffer) == 1
+    assert state.frame_buffer[-1]["rev"] == 0
+
+    state.stream.feed("A")
+    state.update_revision_if_needed()
+    state.stream.feed("B")
+    state.update_revision_if_needed()
+    state.stream.feed("C")
+    state.update_revision_if_needed()
+
+    assert state.screen_rev == 3
+    assert len(state.frame_buffer) == 3
+    assert [frame["rev"] for frame in state.frame_buffer] == [1, 2, 3]
+
+
+
+def test_session_update_uses_latest_frame_buffer_snapshot(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    state.configure_screen(8, 2)
+    state.stream.feed("BUF")
+    state.update_revision_if_needed()
+
+    # Simulate divergent live render path; payload should still come from frame buffer.
+    state.render_text = lambda: ["LIVE____", "________"]
+
+    monkeypatch.setattr(handlers, "STATE", state)
+
+    payload = handle_session_update({"mode": "latest"})
+
+    assert payload["ok"] is True
+    assert payload["screen"]["text"] == state.frame_buffer[-1]["text"]
+    assert payload["screen_rev"] == state.frame_buffer[-1]["rev"]
 
 
 def test_recv_loop_records_unexpected_exception(monkeypatch):

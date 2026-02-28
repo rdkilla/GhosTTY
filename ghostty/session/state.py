@@ -3,6 +3,7 @@ import os
 import socket
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,8 @@ class SessionState:
     last_io_log_error: str | None = None
     recv_error_count: int = 0
     last_recv_error: str | None = None
+    frame_buffer_limit: int = 120
+    frame_buffer: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=120))
 
     def configure_screen(self, width: int, height: int) -> None:
         self.width, self.height = width, height
@@ -54,6 +57,8 @@ class SessionState:
         self.stream = pyte.Stream(self.screen)
         self.signature = self.compute_signature()
         self.telnet_pending = b""
+        self.frame_buffer = deque(maxlen=self.frame_buffer_limit)
+        self.append_frame_snapshot()
 
     def compute_signature(self) -> str:
         text = "\n".join(self.render_text())
@@ -78,6 +83,30 @@ class SessionState:
             self.signature = new_sig
             self.screen_rev += 1
             self.last_change_ts = now
+            self.append_frame_snapshot()
+
+    def append_frame_snapshot(self) -> None:
+        self.frame_buffer.append(
+            {
+                "rev": self.screen_rev,
+                "ts": time.time(),
+                "text": self.render_text(),
+            }
+        )
+
+
+    def latest_frame(self) -> dict[str, Any] | None:
+        if not self.frame_buffer:
+            return None
+        return self.frame_buffer[-1]
+
+    def screen_payload_from_frame(self, frame: dict[str, Any] | None) -> dict[str, Any]:
+        text = self.render_text() if frame is None else frame["text"]
+        return {
+            "w": self.width,
+            "h": self.height,
+            "text": text,
+        }
 
     def screen_payload(self) -> dict[str, Any]:
         return {
