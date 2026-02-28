@@ -19,3 +19,12 @@ def test_unsupported_csi_sequence_is_ignored_and_text_continues():
     stream.feed("A\x1b[?25lB")
 
     assert screen.display[0].startswith("AB")
+
+
+def test_newline_at_bottom_scrolls_screen():
+    screen = Screen(6, 2)
+    stream = Stream(screen)
+
+    stream.feed("A\r\nB\r\nC")
+
+    assert screen.display == ["B     ", "C     "]
