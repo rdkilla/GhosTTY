@@ -64,9 +64,29 @@ Key behavior:
   - `latest` returns immediately.
   - `stable` waits until screen changes settle for `stable_ms`.
 - **Fatal disconnects**: if the socket drops, responses return `connection_lost`; no auto-reconnect.
+- **Daemon log**: request/server exceptions and startup events are written to `/tmp/ghostty-daemon.log` when daemon logging is enabled.
+  - Enable logging with CLI `--verbose`, `GHOSTTY_DAEMON_VERBOSE=1`, or by setting `GHOSTTY_DAEMON_LOG`.
+  - Set `GHOSTTY_DAEMON_LOG` to choose a different log file path.
 - **I/O diagnostics log**: inbound and outbound telnet bytes are appended to `/tmp/ghostty-io.log` by default. Set `GHOSTTY_IO_LOG` to override the path.
 
 ---
+
+### Logging and diagnostics
+
+Daemon autostart from the CLI is quiet by default (stdout/stderr to `/dev/null`). To capture daemon output and exceptions:
+
+```bash
+python3 ghostty.py --verbose connect <host>
+# or
+GHOSTTY_DAEMON_VERBOSE=1 python3 ghostty.py connect <host>
+# or (also enables logging)
+GHOSTTY_DAEMON_LOG=/tmp/my-ghostty-daemon.log python3 ghostty.py connect <host>
+```
+
+Expected default log locations:
+
+- Daemon/server log: `/tmp/ghostty-daemon.log` (when enabled).
+- Telnet I/O log: `/tmp/ghostty-io.log`.
 
 ## Installation
 
