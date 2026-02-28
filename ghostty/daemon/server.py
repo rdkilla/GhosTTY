@@ -42,25 +42,34 @@ class Handler(socketserver.StreamRequestHandler):
         try:
             req = json.loads(data)
             cmd = req.get("cmd")
+            LOGGER.info(
+                "request received",
+                extra={"event": "request_received", "cmd": cmd or "unknown", "detail": self.client_address},
+            )
 
             if cmd == "ping":
-                self.respond({"ok": True})
+                self.respond({"ok": True}, cmd=cmd)
             elif cmd == "connect":
-                self.respond(handle_connect(req))
+                self.respond(handle_connect(req), cmd=cmd)
             elif cmd == "session_update":
-                self.respond(handle_session_update(req))
+                self.respond(handle_session_update(req), cmd=cmd)
             elif cmd == "send":
-                self.respond(handle_send(req))
+                self.respond(handle_send(req), cmd=cmd)
             else:
-                self.respond({"ok": False, "error": ERR_UNKNOWN_COMMAND})
+                self.respond({"ok": False, "error": ERR_UNKNOWN_COMMAND}, cmd=cmd)
         except Exception as exc:
             LOGGER.exception(
                 "request handling failed",
                 extra={"event": "request_error", "cmd": cmd or "unknown", "detail": str(exc)},
             )
-            self.respond({"ok": False, "error": str(exc)})
+            self.respond({"ok": False, "error": str(exc)}, cmd=cmd)
 
-    def respond(self, payload: dict[str, Any]) -> None:
+    def respond(self, payload: dict[str, Any], cmd: str | None = None) -> None:
+        result = "ok" if payload.get("ok") else "error"
+        LOGGER.info(
+            "response sent",
+            extra={"event": "response_sent", "cmd": cmd or "unknown", "detail": result},
+        )
         self.wfile.write((json.dumps(payload) + "\n").encode("utf-8"))
 
 
