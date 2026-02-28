@@ -6,6 +6,48 @@ from .state import SessionState
 from .telnet import parse_telnet_stream
 
 
+def _strip_synchronet_ctrl_a(text: str) -> str:
+    """Strip Synchronet Ctrl-A attribute codes from display text.
+
+    Synchronet commonly encodes color/style control as \x01 + <code>. These
+    bytes should affect styling in a terminal, not appear as literal glyphs in
+    the text grid. We strip the pair while preserving an escaped literal Ctrl-A
+    represented as a doubled \x01\x01 sequence.
+    """
+
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch != "\x01":
+            out.append(ch)
+            i += 1
+            continue
+
+        if i + 1 >= len(text):
+            break
+
+        nxt = text[i + 1]
+        if nxt == "\x01":
+            out.append("\x01")
+        i += 2
+
+    return "".join(out)
+
+
+def _decode_terminal_text(data: bytes) -> str:
+    """Decode telnet application bytes for BBS-style terminals.
+
+    - CP437 preserves common DOS/BBS glyphs that UTF-8+ignore drops.
+    - NUL bytes are ignored for screen rendering.
+    - Synchronet Ctrl-A attribute codes are stripped.
+    """
+
+    text = data.decode("cp437", errors="replace")
+    text = text.replace("\x00", "")
+    return _strip_synchronet_ctrl_a(text)
+
+
 def recv_loop(state: SessionState, connection_token: int) -> None:
     while True:
         with state.lock:
@@ -41,7 +83,7 @@ def recv_loop(state: SessionState, connection_token: int) -> None:
                     except OSError as err:
                         state.record_io_log_error(err)
                     sock.sendall(payload)
-                text = app_data.decode("utf-8", errors="ignore")
+                text = _decode_terminal_text(app_data)
                 state.stream.feed(text)
                 state.update_revision_if_needed()
         except OSError as err:
