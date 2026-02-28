@@ -20,7 +20,11 @@ def recv_loop(state: SessionState, connection_token: int) -> None:
                     if state.connection_token == connection_token:
                         state.connected = False
                 return
-            state.log_io("in", data)
+            try:
+                state.log_io("in", data)
+            except OSError as err:
+                state.record_io_log_error(err)
+
             with state.lock:
                 if state.connection_token != connection_token:
                     return
@@ -32,7 +36,10 @@ def recv_loop(state: SessionState, connection_token: int) -> None:
                 )
                 state.telnet_pending = pending
                 for payload in responses:
-                    state.log_io("out", payload)
+                    try:
+                        state.log_io("out", payload)
+                    except OSError as err:
+                        state.record_io_log_error(err)
                     sock.sendall(payload)
                 text = app_data.decode("utf-8", errors="ignore")
                 state.stream.feed(text)

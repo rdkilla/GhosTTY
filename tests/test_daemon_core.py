@@ -2,6 +2,7 @@ from threading import Lock
 
 from ghostty.daemon import handlers
 from ghostty.daemon.handlers import extract_hints, handle_send, handle_session_update
+from ghostty.session import recv_loop
 from ghostty.session.state import SessionState
 
 
@@ -178,3 +179,46 @@ def test_log_io_writes_hex_and_escaped_text(tmp_path):
     assert "len=3" in content
     assert "hex=010341" in content
     assert "'\\x01\\x03A'" in content
+
+
+class _OneShotSocket:
+    def __init__(self, payload: bytes):
+        self._payload = payload
+        self._delivered = False
+
+    def recv(self, size: int) -> bytes:
+        if self._delivered:
+            return b""
+        self._delivered = True
+        return self._payload
+
+    def sendall(self, payload: bytes) -> None:
+        return
+
+
+def test_recv_loop_continues_when_inbound_log_io_fails(monkeypatch):
+    state = SessionState(connected=True, lock=Lock(), action_lock=Lock())
+    state.configure_screen(20, 3)
+    state.connection_token = 7
+    state.socket_obj = _OneShotSocket(b"hello")
+
+    fed: list[str] = []
+
+    def fake_feed(text: str) -> None:
+        fed.append(text)
+        state.stop_event.set()
+
+    state.stream.feed = fake_feed
+
+    def flaky_log(direction: str, data: bytes) -> None:
+        if direction == "in":
+            raise OSError("io log write failed")
+
+    state.log_io = flaky_log
+
+    recv_loop(state, connection_token=7)
+
+    assert fed == ["hello"]
+    assert state.connected is True
+    assert state.io_log_error_count == 1
+    assert state.last_io_log_error == "io log write failed"
