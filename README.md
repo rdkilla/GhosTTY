@@ -68,6 +68,23 @@ Key behavior:
 
 ---
 
+### Logging and diagnostics
+
+Daemon autostart from the CLI is quiet by default (stdout/stderr to `/dev/null`). To capture daemon output and exceptions:
+
+```bash
+python3 ghostty.py --verbose connect <host>
+# or
+GHOSTTY_DAEMON_VERBOSE=1 python3 ghostty.py connect <host>
+# or (also enables logging)
+GHOSTTY_DAEMON_LOG=/tmp/my-ghostty-daemon.log python3 ghostty.py connect <host>
+```
+
+Expected default log locations:
+
+- Daemon/server log: `/tmp/ghostty-daemon.log` (when enabled).
+- Telnet I/O log: `/tmp/ghostty-io.log`.
+
 ## Installation
 
 ### Requirements

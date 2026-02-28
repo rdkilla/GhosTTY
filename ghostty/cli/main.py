@@ -10,6 +10,7 @@ def print_json(payload: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="ghostty")
+    parser.add_argument("--verbose", action="store_true", help="Enable daemon log redirection to file")
     sub = parser.add_subparsers(dest="command", required=True)
 
     c = sub.add_parser("connect")
@@ -67,5 +68,5 @@ def main() -> None:
     else:
         raise RuntimeError("unsupported command")
 
-    resp = daemon_request(payload)
+    resp = daemon_request(payload, verbose=args.verbose)
     print_json(resp)
