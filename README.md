@@ -25,6 +25,90 @@ At runtime, you interact with a single command-line client (`ghostty.py` / `./gh
 
 ---
 
+## Current working command surface (repo rescan)
+
+The authoritative CLI entrypoint is:
+
+```bash
+python3 ghostty.py --help
+```
+
+Current top-level commands:
+
+- `connect`
+- `session`
+  - `update`
+  - `history`
+- `send`
+- `screen`
+- `key`
+- `type`
+
+### Quick help checklist
+
+Use these any time to confirm command wiring in your local checkout:
+
+```bash
+python3 ghostty.py --help
+python3 ghostty.py connect --help
+python3 ghostty.py session --help
+python3 ghostty.py session update --help
+python3 ghostty.py session history --help
+python3 ghostty.py send --help
+python3 ghostty.py screen --help
+python3 ghostty.py key --help
+python3 ghostty.py type --help
+```
+
+### Runtime daemon command contract
+
+The Unix-socket daemon accepts these JSON `cmd` values:
+
+- `ping`
+- `connect`
+- `session_update`
+- `session_history`
+- `send`
+
+The CLI wrappers map to daemon commands as follows:
+
+- `connect` → `connect`
+- `screen` → `session_update` with `mode=latest`
+- `session update` → `session_update`
+- `session history` → `session_history`
+- `key` → `send` with a single key action
+- `type` → `send` with a single type action
+- `send` → `send`
+
+---
+
+## Core working functions by module
+
+This section documents the current "working functions" that define the canonical behavior.
+
+- `ghostty/cli/main.py`
+  - `main()`: command parser + CLI → daemon payload mapping.
+  - `print_json()`: stable JSON output formatting.
+- `ghostty/cli/client.py`
+  - `daemon_request()`: request + optional daemon autostart.
+  - `start_daemon()`: background daemon launch + readiness ping.
+- `ghostty/daemon/server.py`
+  - `Handler.handle()`: receives JSON command and dispatches handlers.
+  - `run_server()`: binds Unix socket and serves forever.
+- `ghostty/daemon/handlers.py`
+  - `handle_connect()`: establish/replace telnet session and recv thread.
+  - `handle_session_update()`: latest/stable snapshot payload (+ optional frames/char stream).
+  - `handle_session_history()`: filtered in-memory frame history.
+  - `handle_send()`: validate/execute actions and wait for stability.
+  - `extract_hints()`: prompt/menu/pager heuristics from rendered text.
+- `ghostty/session/reader.py`
+  - `recv_loop()`: telnet receive loop, telnet negotiation, pyte feed, revision updates.
+  - `send_actions()`: emits key/type actions to telnet socket.
+- `ghostty/session/stability.py`
+  - `wait_for_stable()`: stable-state wait logic using revision timing windows.
+
+---
+
 ## Repository layout
 
 ```text

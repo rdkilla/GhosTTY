@@ -40,7 +40,25 @@
 
 - `connect`: open session.
 - `session update --mode latest|stable`: fetch screen snapshot.
+- `session history`: fetch filtered in-memory frame history.
 - `send --key ...` / `send --actions ...`: inject input and wait for response state.
+- `screen`: convenience alias for `session update --mode latest`.
+- `key <name>`: convenience wrapper for one-key `send`.
+- `type "..."`: convenience wrapper for one-text `send`.
+
+### Current help surface (verified)
+
+```bash
+python3 ghostty.py --help
+python3 ghostty.py connect --help
+python3 ghostty.py session --help
+python3 ghostty.py session update --help
+python3 ghostty.py session history --help
+python3 ghostty.py send --help
+python3 ghostty.py screen --help
+python3 ghostty.py key --help
+python3 ghostty.py type --help
+```
 
 ## 5) Data Contracts
 
