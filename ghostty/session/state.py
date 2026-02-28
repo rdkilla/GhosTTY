@@ -4,9 +4,19 @@ import socket
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pyte
+
+
+def resolve_default_io_log_path() -> str:
+    env_path = os.environ.get("GHOSTTY_IO_LOG")
+    if env_path:
+        return env_path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    return str(repo_root / "ghostty-io.log")
 
 
 @dataclass
@@ -30,7 +40,7 @@ class SessionState:
     signature: str = ""
     lock: threading.Lock = field(default_factory=threading.Lock)
     action_lock: threading.Lock = field(default_factory=threading.Lock)
-    io_log_path: str = field(default_factory=lambda: os.environ.get("GHOSTTY_IO_LOG", "/tmp/ghostty-io.log"))
+    io_log_path: str = field(default_factory=resolve_default_io_log_path)
     io_log_lock: threading.Lock = field(default_factory=threading.Lock)
     telnet_pending: bytes = b""
 
@@ -77,5 +87,6 @@ class SessionState:
         escaped = data.decode("utf-8", errors="backslashreplace")
         line = f"{timestamp}Z dir={direction} len={len(data)} hex={data.hex()} text={escaped!r}\n"
         with self.io_log_lock:
+            Path(self.io_log_path).parent.mkdir(parents=True, exist_ok=True)
             with open(self.io_log_path, "a", encoding="utf-8") as f:
                 f.write(line)
